@@ -1,0 +1,6 @@
+[submodule "submodules/vllm"]
+	path = submodules/vllm
+	url = https://github.com/julien-piet/vllm
+[submodule "submodules/cpp-hash"]
+	path = submodules/cpp-hash
+	url = git@github.com:julien-piet/cpp-hash.git
