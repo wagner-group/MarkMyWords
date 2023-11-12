@@ -9,6 +9,20 @@ from watermark_benchmark.watermark.templates.verifier import Verifier, Empirical
 from watermark_benchmark.watermark.templates.random import ExternalRandomness
 
 class InverseTransformGenerator(Watermark):
+    """
+    A watermark generator that uses the inverse transform sampling method to generate watermarks. See Kuditipudi et al. (2023) for more details.
+
+    Args:
+        rng (RandomNumberGenerator): A random number generator.
+        verifiers (List[Verifier]): A list of verifiers to verify the watermark.
+        tokenizer (Tokenizer): A tokenizer to tokenize the watermark.
+        temp (float): A temperature parameter for softmax.
+        skip_prob (float): A probability of skipping the watermark generation.
+
+    Attributes:
+        skip_prob (float): A probability of skipping the watermark generation.
+        ctr (None): A counter for the watermark generation.
+    """
 
     def __init__(self, rng, verifiers, tokenizer, temp, skip_prob):
         super().__init__(rng, verifiers, tokenizer, temp)
@@ -46,6 +60,11 @@ class InverseTransformGenerator(Watermark):
 
 
 class InverseTransformVerifier(Verifier):
+    """
+    A verifier that uses the inverse transform sampling method to generate random numbers and
+    compares them against the input tokens to calculate a score. The score is then compared
+    against a p-value to determine if the input tokens are likely to have been generated randomly.
+    """
 
     def __init__(self, rng, pvalue, tokenizer):
         super().__init__(rng, pvalue, tokenizer)

@@ -6,6 +6,22 @@ from watermark_benchmark.watermark.templates.verifier import Verifier, Empirical
 
 
 class DistributionShiftGeneration(Watermark):
+    """
+    A watermarking scheme that adds a delta value to the logits of certain tokens in the input sequence. See Kirchenbauer et al. (2023) for more details.
+
+    Args:
+        rng (RandomNumberGenerator): A random number generator object.
+        verifier (Verifier): A verifier object.
+        tokenizer (Tokenizer): A tokenizer object.
+        temp (float): Temperature parameter for softmax function.
+        delta (float): Value to add to logits of selected tokens.
+        gamma (float): Proportion of tokens to select for watermarking.
+
+    Attributes:
+        delta (float): Value to add to logits of selected tokens.
+        gamma (float): Proportion of tokens to select for watermarking.
+        temp (float): Temperature parameter for softmax function.
+    """
 
     def __init__(self, rng, verifier, tokenizer, temp, delta, gamma):
         super().__init__(rng, verifier, tokenizer, temp)
@@ -15,6 +31,17 @@ class DistributionShiftGeneration(Watermark):
 
 
     def process(self, logits, previous_tokens, ids):
+        """
+        Applies the watermarking scheme to the input logits.
+
+        Args:
+            logits (torch.Tensor): The input logits.
+            previous_tokens (torch.Tensor): The previous tokens in the sequence.
+            ids (torch.Tensor): The IDs of the previous tokens.
+
+        Returns:
+            torch.Tensor: The logits with the watermark applied.
+        """
 
         # Truncate unused logits
         logits = logits[:, :self.rng.vocab_size]
@@ -33,6 +60,18 @@ class DistributionShiftGeneration(Watermark):
 
 
 class DistributionShiftVerifier(Verifier):
+    """
+    A verifier that checks for distribution shift in a sequence of tokens.
+
+    Args:
+        rng (RandomNumberGenerator): A random number generator.
+        pvalue (float): The p-value threshold for the binomial test.
+        tokenizer (Tokenizer): A tokenizer for the sequence of tokens.
+        gamma (float): The proportion of tokens that are allowed to be different.
+
+    Attributes:
+        gamma (float): The proportion of tokens that are allowed to be different.
+    """
     def __init__(self, rng, pvalue, tokenizer, gamma):
         super().__init__(rng, pvalue, tokenizer)
         self.gamma = gamma
@@ -75,7 +114,23 @@ class DistributionShiftVerifier(Verifier):
 
 
 class DistributionShiftEmpiricalVerifier(EmpiricalVerifier):
+    """
+    A class for verifying the distribution shift of a watermark using empirical testing.
 
+    Inherits from EmpiricalVerifier.
+
+    Args:
+        rng (RandomNumberGenerator): A random number generator object.
+        pvalue (float): The p-value threshold for the statistical test.
+        tokenizer (Tokenizer): A tokenizer object.
+        method (str): The method used to generate the watermark.
+        gamma_watermark (float): The gamma value for the watermark.
+        gamma_edit_distance (float): The gamma value for the edit distance.
+
+    Methods:
+        score_matrix(tokens, random_values, index=0): Computes the score matrix for the given tokens and random values.
+        random_score_matrix(tokens, random_shape, shared_randomness, index=0): Produces a random score matrix.
+    """
     def __init__(self, rng, pvalue, tokenizer, method, gamma_watermark, gamma_edit_distance):
         super().__init__(rng, pvalue, tokenizer, method, gamma_edit_distance, False)
         self.gamma = gamma_watermark

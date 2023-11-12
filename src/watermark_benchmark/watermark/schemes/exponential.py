@@ -10,6 +10,16 @@ from watermark_benchmark.watermark.templates.verifier import Verifier, Empirical
 
 
 class ExponentialGenerator(Watermark):
+    """
+    A watermark generator that uses an exponential distribution to select the next token. See Aaronson et al. (2023) for more details.
+
+    Args:
+        rng (RandomNumberGenerator): A random number generator.
+        verifiers (List[Verifier]): A list of verifiers to check the watermark.
+        tokenizer (Tokenizer): A tokenizer to convert text to tokens.
+        temp (float): A temperature value to control the randomness of the selection.
+        skip_prob (float): A probability value to skip the watermark generation process.
+    """
 
     def __init__(self, rng, verifiers, tokenizer, temp, skip_prob): 
         super().__init__(rng, verifiers, tokenizer, temp)
@@ -44,6 +54,15 @@ class ExponentialGenerator(Watermark):
 
 
 class ExponentialVerifier(Verifier):
+    """
+    Implements a verifier for the exponential watermarking scheme.
+
+    Args:
+        rng (RandomNumberGenerator): The random number generator to use.
+        pvalue (float): The p-value threshold for the verifier.
+        tokenizer (Tokenizer): The tokenizer to use.
+        log (bool): Whether to use logarithmic scoring or not.
+    """
 
     def __init__(self, rng, pvalue, tokenizer, log):
         super().__init__(rng, pvalue, tokenizer)
@@ -94,6 +113,22 @@ class ExponentialVerifier(Verifier):
 
 
 class ExponentialEmpiricalVerifier(EmpiricalVerifier):
+    """
+    A class for verifying watermarks using the Exponential scheme.
+
+    Inherits from EmpiricalVerifier.
+
+    Args:
+        rng (torch.Generator): A random number generator.
+        pvalue (float): The p-value threshold for the verification test.
+        tokenizer (Tokenizer): A Tokenizer object for tokenizing text.
+        method (str): The watermarking method used.
+        log (bool): Whether to use logarithmic scores or not.
+        gamma (float): The gamma parameter for the Exponential scheme.
+
+    Attributes:
+        log (bool): Whether to use logarithmic scores or not.
+    """
 
     def __init__(self, rng, pvalue, tokenizer, method, log, gamma):
         log = True

@@ -12,7 +12,7 @@ from watermark_benchmark.utils.summarize import summarize_robustness, verify_thr
 
 
 def run(config_file, generations=None):
-
+    
     # Load config
     config = load_config(config_file) if type(config_file) == str else config_file
     

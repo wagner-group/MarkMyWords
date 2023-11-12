@@ -9,6 +9,14 @@ from dataclasses import replace
 
 
 def writer_process(queue, config, w_count):
+    """
+    This function is a process that writes the generated outputs to a file.
+
+    Args:
+        queue (multiprocessing.Queue): A queue containing the generated outputs.
+        config (Config): The configuration object.
+        w_count (int): The number of watermark generations to write to the file.
+    """
     from watermark_benchmark.utils import get_output_file
     outfilepath = get_output_file(config)
 
@@ -23,7 +31,16 @@ def writer_process(queue, config, w_count):
 
 
 def gen_process(config, tasks, writer_queue, device, prompts):
+    """
+    This function is a process that generates watermarked text.
 
+    Args:
+        config (Config): The configuration object.
+        tasks (list): A list of tuples containing the watermark, keys, and temperature.
+        writer_queue (multiprocessing.Queue): A queue to store the generated outputs.
+        device (int): The device to use for generating the watermarked text.
+        prompts (list): A list of prompts to use for generating the watermarked text.
+    """
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
     # Imports
@@ -60,7 +77,13 @@ def gen_process(config, tasks, writer_queue, device, prompts):
 
 
 def run(config_file, watermarks=None):
+    """
+    This function runs the watermark generation process.
 
+    Args:
+        config_file (str): The path to the configuration file.
+        watermarks (list): A list of watermarks to use for generating the watermarked text.
+    """
     from watermark_benchmark.utils import load_config, setup_randomness, get_output_file
     from watermark_benchmark.utils.standardize import standardize
     from watermark_benchmark.utils.classes import Generation, WatermarkSpec
@@ -145,7 +168,7 @@ def run(config_file, watermarks=None):
 
 
 def main():
-    run(sys.argv[1])
+        run(sys.argv[1])
 
 
 ### Prompts ###

@@ -5,10 +5,25 @@ import numpy as np
 
 from watermark_benchmark.watermark.templates.random import ExternalRandomness
 
+from abc import ABC, abstractmethod
+
 class Verifier(ABC):
+    """
+    Abstract base class for watermark verifiers.
+    """
 
     @abstractmethod
     def __init__(self, rng, pvalue, tokenizer):
+        """
+        Initializes the Verifier object.
+
+        :param rng: The random number generator to use.
+        :type rng: Random
+        :param pvalue: The p-value to use for the verification.
+        :type pvalue: float
+        :param tokenizer: The tokenizer to use for splitting text into tokens.
+        :type tokenizer: Tokenizer
+        """
         self.pvalue = pvalue
         self.rng = rng
         self.tokenizer = tokenizer
@@ -16,15 +31,36 @@ class Verifier(ABC):
 
     @abstractmethod
     def verify(self, tokens, index=0, exact=False):
+        """
+        Verifies if a given sequence of tokens contains a watermark.
+
+        :param tokens: The sequence of tokens to verify.
+        :type tokens: list of str
+        :param index: The starting index to search for the watermark.
+        :type index: int
+        :param exact: Whether to search for an exact match of the watermark or a partial match.
+        :type exact: bool
+        :return: True if the watermark is found, False otherwise.
+        :rtype: bool
+        """
         pass
 
     def id(self):
+        """
+        Returns a unique identifier for the verifier.
+
+        :return: A tuple containing the p-value, the type of the verifier, and the version of the verifier.
+        :rtype: tuple
+        """
         return (self.pvalue, "theoretical", "standard")
 
 
 
 class EmpiricalVerifier(Verifier):
-
+    """
+    EmpiricalVerifier is a subclass of Verifier that implements the empirical verification method.
+    It uses a score matrix to detect watermarks in a given text.
+    """
     @abstractmethod
     def __init__(self, rng, pvalue, tokenizer, method, gamma, log):
         super().__init__(rng, pvalue, tokenizer)
@@ -45,6 +81,15 @@ class EmpiricalVerifier(Verifier):
 
 
     def detect(self, scores):
+        """
+        Detects the watermark in the given score matrix using the specified method.
+
+        Args:
+            scores (torch.Tensor): The score matrix.
+
+        Returns:
+            torch.Tensor: The detected watermark.
+        """
         if self.method == "regular":
             A = self.regular_distance(scores)
         else:
@@ -53,6 +98,15 @@ class EmpiricalVerifier(Verifier):
 
 
     def regular_distance(self, scores):
+        """
+        Computes the regular distance between the scores.
+
+        Args:
+            scores (torch.Tensor): The score matrix.
+
+        Returns:
+            torch.Tensor: The computed distance.
+        """
         KL, SL = scores.shape
         if type(self.rng) == ExternalRandomness:
             indices = torch.vstack((((torch.arange(KL).reshape(-1,1).repeat(1,SL).flatten() + torch.arange(SL).repeat(KL)) % KL), torch.arange(SL).repeat(KL)%SL)).t().reshape(KL, -1, 2).to(scores.device)
@@ -63,6 +117,15 @@ class EmpiricalVerifier(Verifier):
 
 
     def levenstein_distance(self, scores):
+        """
+        Computes the Levenstein distance between the scores.
+
+        Args:
+            scores (torch.Tensor): The score matrix.
+
+        Returns:
+            torch.Tensor: The computed distance.
+        """
         KL, SL = scores.shape
         if type(self.rng) == ExternalRandomness:
             container = torch.zeros((KL, SL+1, SL+1)).float().to(self.rng.device) 
@@ -79,7 +142,13 @@ class EmpiricalVerifier(Verifier):
 
 
     def pre_compute_baseline(self, max_len=1024, runs=200):
-        # To speed things up, we pre-compute a set of baseline scores. This should work well for external randomness, for internal randomness it can induce FPs since repeated tokens can induce repeated randomness
+        """
+        Pre-computes a set of baseline scores to speed up the verification process.
+
+        Args:
+            max_len (int, optional): The maximum length of the text. Defaults to 1024.
+            runs (int, optional): The number of runs to perform. Defaults to 200.
+        """
         self.precomputed_results = torch.zeros((runs, max_len)).to(self.rng.device)
         tokens = torch.randint(0,self.rng.vocab_size,(max_len,))
         if type(self.rng) == ExternalRandomness: 
@@ -98,6 +167,17 @@ class EmpiricalVerifier(Verifier):
 
 
     def verify(self, tokens, index=0, exact=False):
+        """
+        Verifies if the given text contains a watermark.
+
+        Args:
+            tokens (torch.Tensor): The text to verify.
+            index (int, optional): The index of the text. Defaults to 0.
+            exact (bool, optional): Whether to perform an exact verification. Defaults to False.
+
+        Returns:
+            list: A list of tuples containing the verification results.
+        """
         tokens = tokens.to(self.rng.device)
 
         if type(self.rng) == ExternalRandomness:
@@ -152,5 +232,11 @@ class EmpiricalVerifier(Verifier):
         return rtn
 
     def id(self):
+        """
+        Returns the ID of the verifier.
+
+        Returns:
+            tuple: The ID of the verifier.
+        """
         return (self.pvalue, "empirical", self.method)
 

@@ -29,7 +29,19 @@ def writer_process(queue, config, w_count):
                 outfile.write("\n".join(str(gen) for gen in reduced)+"\n")
 
 
+import math
+
 def get_efficiency(w, pval):
+    """
+    Returns the efficiency of a watermark detection algorithm given a list of watermark scores and a p-value threshold.
+    
+    Args:
+        w (list): A list of tuples representing watermark scores. Each tuple contains four values: the document ID, the watermark score, the p-value, and the detection time.
+        pval (float): The p-value threshold used to determine whether a watermark has been detected.
+    
+    Returns:
+        float: The efficiency of the watermark detection algorithm, defined as the detection time of the last detected watermark.
+    """
     if w[-1][2] > pval:
         return math.inf
     
@@ -41,7 +53,18 @@ def get_efficiency(w, pval):
 
 
 def detect_process(device, config, tasks, writer_queue):
+    """
+    Detects watermarks in the given tasks using the specified device and configuration.
 
+    Args:
+        device (int): The device to use for detection.
+        config (argparse.Namespace): The configuration to use for detection.
+        tasks (List[Tuple[Generation, List[Generation]]]): The tasks to perform detection on.
+        writer_queue (Queue): The queue to write the results to.
+
+    Returns:
+        None
+    """
     # Setup device
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 

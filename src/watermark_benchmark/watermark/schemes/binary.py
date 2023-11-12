@@ -10,6 +10,22 @@ from watermark_benchmark.watermark.templates.verifier import EmpiricalVerifier, 
 from watermark_benchmark.watermark.templates.random import ExternalRandomness
 
 class BinaryGenerator(Watermark):
+    """
+    A watermarking scheme that generates binary tokens. See Christ et al. (2023) for more details.
+
+    Args:
+        rng (RandomNumberGenerator): A random number generator.
+        verifier (Verifier): A verifier object.
+        tokenizer (Tokenizer): A tokenizer object.
+        temp (float): A temperature value for softmax.
+        binarizer (Binarization): A binarizer object.
+        skip_prob (float): A probability value for skipping the watermarking process.
+
+    Attributes:
+        skip_prob (float): A probability value for skipping the watermarking process.
+        base_len (int): The length of the previous tokens.
+        binarizer (Binarization): A binarizer object.
+    """
 
     def __init__(self, rng, verifier, tokenizer, temp, binarizer, skip_prob):
         super().__init__(rng, verifier, tokenizer, temp)
@@ -83,6 +99,20 @@ class BinaryGenerator(Watermark):
 
 
 class BinaryVerifier(Verifier):
+    """
+    Verifier for binary watermarking schemes.
+
+    Args:
+        rng (RandomNumberGenerator): Random number generator.
+        pvalue (float): P-value threshold for the statistical test.
+        tokenizer (Tokenizer): Tokenizer object.
+        binarizer (Binarizer): Binarizer object.
+        skip_prob (float): Probability of skipping a token during verification.
+
+    Attributes:
+        skip_prob (float): Probability of skipping a token during verification.
+        binarizer (Binarizer): Binarizer object.
+    """
 
     def __init__(self, rng, pvalue, tokenizer, binarizer, skip_prob):
         super().__init__(rng, pvalue, tokenizer)
@@ -133,6 +163,23 @@ class BinaryVerifier(Verifier):
 
 
 class BinaryEmpiricalVerifier(EmpiricalVerifier):
+    """
+    A verifier for binary watermarking schemes that uses empirical testing to detect watermarks.
+
+    Args:
+        rng (RandomnessProvider): A randomness provider.
+        pvalue (float): The p-value threshold for the statistical test.
+        tokenizer (Tokenizer): A tokenizer object.
+        method (str): The detection method to use.
+        binarizer (Binarizer, optional): A binarizer object. Defaults to None.
+        skip_prob (float): The probability of skipping a token during detection.
+        gamma (float): The gamma parameter for the statistical test.
+
+    Attributes:
+        skip_prob (float): The probability of skipping a token during detection.
+        binarizer (Binarizer): A binarizer object.
+    """
+    
 
     def __init__(self, rng, pvalue, tokenizer, method, binarizer, skip_prob, gamma):
         super().__init__(rng, pvalue, tokenizer, method, gamma, log = True)

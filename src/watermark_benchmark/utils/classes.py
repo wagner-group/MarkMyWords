@@ -22,6 +22,15 @@ def dict_to_str(val):
 
 @dataclass(frozen=True)
 class VerifierSpec:
+    """
+    A class representing the verifier specification.
+
+    Attributes:
+        verifier (str): The verifier to use. Defaults to 'Theoretical'.
+        empirical_method (str): The empirical method to use. Defaults to 'regular'.
+        log (Optional[bool]): Whether to use a log score
+        gamma (Optional[float]): The gamma value to use for edit distance. Defaults to 0.
+    """
     verifier: str = 'Theoretical'
     empirical_method: str = "regular"
     log: Optional[bool] = None

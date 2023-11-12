@@ -13,7 +13,19 @@ from tqdm import tqdm
 from watermark_benchmark.attacks.helm_attacks import setup
 
 def init_attacks(config, dispatch_queue=None, results_queue=None, synonym_cache=None, names_only=False):
+    """
+    Initializes a dictionary of attack objects based on the given configuration.
 
+    Args:
+        config: A configuration object containing attack parameters.
+        dispatch_queue: A queue for dispatching generation tasks to worker processes.
+        results_queue: A queue for receiving generation results from worker processes.
+        synonym_cache: A cache for storing synonym generation results.
+        names_only: A boolean indicating whether to only include attack names in the dictionary.
+
+    Returns:
+        A dictionary of attack objects, keyed by attack name.
+    """
     from watermark_benchmark.attacks.helm_attacks import init_helm_attacks
     from watermark_benchmark.attacks.synonym_attack import SynonymAttack
     from watermark_benchmark.attacks.paraphrase_attack import ParaphraseAttack
@@ -35,7 +47,20 @@ def init_attacks(config, dispatch_queue=None, results_queue=None, synonym_cache=
 
 
 def perturb_process(task_queue, writer_queue, results_queue, dispatch, config, synonym_cache):
+    """
+    This function is responsible for perturbing the input text using various attacks.
 
+    Args:
+        task_queue (Queue): A queue of tasks to be processed.
+        writer_queue (Queue): A queue to write the results to.
+        results_queue (Queue): A queue to store the results of the attacks.
+        dispatch (function): A function to dispatch the results to.
+        config (dict): A dictionary containing the configuration for the attacks.
+        synonym_cache (dict): A dictionary containing the synonym cache.
+
+    Returns:
+        None
+    """
     from watermark_benchmark.utils import setup_randomness
     # Setup attacks
     setup_randomness(config)
@@ -59,7 +84,14 @@ def perturb_process(task_queue, writer_queue, results_queue, dispatch, config, s
 
 
 def writer_process(queue, config, w_count):
-
+    """
+    This function writes the perturbed data to the output file.
+    
+    Args:
+        queue: multiprocessing.Queue object
+        config: dict containing configuration parameters
+        w_count: int, number of perturbations to write to the output file
+    """
     from watermark_benchmark.utils import get_output_file
     outfilepath = get_output_file(config)
 
@@ -74,7 +106,16 @@ def writer_process(queue, config, w_count):
 
 
 def run(config_file, generations=None):
+    """
+    Runs the perturbation process on the given generations and configuration file.
 
+    Args:
+        config_file (str or dict): Path to the configuration file or the configuration dictionary.
+        generations (list of Generation, optional): List of generations to perturb. If not provided, it will be loaded from the input file specified in the configuration.
+
+    Returns:
+        None
+    """
     from watermark_benchmark.utils import load_config, setup_randomness, get_output_file, get_input_file
     from watermark_benchmark.utils.apis import dipper_server, openai_process, translate_process 
     from watermark_benchmark.utils.classes import Generation

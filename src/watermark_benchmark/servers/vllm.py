@@ -4,14 +4,32 @@ from vllm import LLM, LogitProcessor, DefaultLogitProcessor, InputMetadata, Samp
 import torch
 
 from .server import Server
+from typing import Optional, List, Dict, Any 
 from watermark_benchmark.utils.stats import Stats
 from watermark_benchmark.utils.classes import Generation, WatermarkSpec, ConfigSpec 
 
-from typing import Optional, List, Dict, Any 
-
 class VLLMServer(Server, LogitProcessor):
+    """
+    A VLLM based watermarking server
+
+    Attributes:
+    - config (Dict[str, Any]): A dictionary containing the configuration of the model.
+    - model (Any): The LLM model.
+    - ray (bool): A boolean indicating whether the model is distributed or not.
+    - server (LLM): The LLM server.
+    - devices (List[int]): A list of integers representing the available devices.
+    - watermark_engine (Any): The watermark engine.
+    - max_idx (int): The maximum index.
+    """
 
     def __init__(self, config: Dict[str, Any], **kwargs) -> None:
+        """
+        Initializes the VLLMServer.
+
+        Args:
+        - config (Dict[str, Any]): A dictionary containing the configuration of the model.
+        - **kwargs: Additional keyword arguments.
+        """
         model = config.model
         self.ray = config.distributed
         if self.ray:
@@ -26,6 +44,9 @@ class VLLMServer(Server, LogitProcessor):
 
 
     def _activate_processor(self) -> None:
+        """
+        Activates the logit processor.
+        """
         if not self.ray:
             for worker in self.server.llm_engine.workers:
                 worker.model.sampler.processor = self
@@ -33,6 +54,9 @@ class VLLMServer(Server, LogitProcessor):
             self.server.llm_engine._run_workers("update_logit_processor", get_all_outputs=True, processor=self)
 
     def _deactivate_processor(self) -> None:
+        """
+        Deactivates the logit processor.
+        """
         if not self.ray:
             for worker in self.server.llm_engine.workers:
                 worker.model.sampler.processor = DefaultLogitProcessor()
@@ -40,13 +64,28 @@ class VLLMServer(Server, LogitProcessor):
             self.server.llm_engine._run_workers("update_logit_processor", get_all_outputs=True, processor=DefaultLogitProcessor())
 
     def install(self, watermark_engine) -> None:
+        """
+        Installs the watermark engine.
+
+        Args:
+        - watermark_engine (Any): The watermark engine.
+        """
         self.watermark_engine = watermark_engine
 
 
     def process(self, \
             logits: torch.Tensor, \
             input_metadata: InputMetadata) -> torch.Tensor:
+        """
+        Processes the logits.
 
+        Args:
+        - logits (torch.Tensor): The logits.
+        - input_metadata (InputMetadata): The input metadata.
+
+        Returns:
+        - torch.Tensor: The processed logits.
+        """
         prev_token_ids = [input_metadata.seq_data[seq_id].get_token_ids() \
                 for seq_group in input_metadata.seq_groups\
                 for seq_id in seq_group[0]]
@@ -69,7 +108,20 @@ class VLLMServer(Server, LogitProcessor):
             keys: Optional[List[int]] = None,
             watermark_spec: Optional[WatermarkSpec] = None,
             use_tqdm = False) -> List[Generation]:
+        """
+        Runs the server.
 
+        Args:
+        - inputs (List[str]): A list of input strings.
+        - config (ConfigSpec): The configuration.
+        - temp (float): The temperature.
+        - keys (Optional[List[int]]): A list of keys.
+        - watermark_spec (Optional[WatermarkSpec]): The watermark specification.
+        - use_tqdm (bool): A boolean indicating whether to use tqdm.
+
+        Returns:
+        - List[Generation]: A list of generations.
+        """
         params = SamplingParams(temperature=temp, max_tokens = config.max_new_tokens, n = config.num_return_sequences)
         self.stats = Stats(len(inputs), temp)
         outputs = self.server.generate(inputs, params, use_tqdm=use_tqdm)
@@ -80,6 +132,9 @@ class VLLMServer(Server, LogitProcessor):
 
 
     def tokenizer(self):
+        """
+        Returns the tokenizer.
+        """
         return self.server.llm_engine.tokenizer
 
 

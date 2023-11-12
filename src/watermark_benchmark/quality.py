@@ -10,7 +10,6 @@ from dataclasses import replace
 from watermark_benchmark.utils.classes import Generation 
 
 
-
 def writer_process(queue, config, w_count):
     from watermark_benchmark.utils import setup_randomness, get_output_file
     setup_randomness(config)
@@ -27,6 +26,18 @@ def writer_process(queue, config, w_count):
 
 
 def rating_process(config, generations, writer_queue, device):
+    """
+    Runs the model on the given generations and calculates the rating for each generation.
+
+    Args:
+        config (Config): Configuration object.
+        generations (List[Generation]): List of generations to rate.
+        writer_queue (Queue): Queue to write the rated generations to.
+        device (int): Index of the GPU device to use.
+
+    Returns:
+        None
+    """
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 

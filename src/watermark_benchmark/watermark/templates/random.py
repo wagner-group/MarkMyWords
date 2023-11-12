@@ -1,11 +1,26 @@
 from abc import ABC, abstractmethod
-import torch
 import random
+import torch
 import hash_cpp
 
 
 class Randomness(ABC):
+    """
+    Abstract base class for generating random numbers using a secret key and devices.
 
+    Args:
+        secret_key (Union[str, List[str]]): A secret key or list of secret keys used for generating random numbers.
+        devices (Union[torch.device, List[torch.device]]): A device or list of devices on which to generate random numbers.
+        vocab_size (int): The size of the vocabulary used for generating random numbers.
+
+    Attributes:
+        secret_key (Union[str, List[str]]): A secret key or list of secret keys used for generating random numbers.
+        devices (List[torch.device]): A list of devices on which to generate random numbers.
+        device (torch.device): The device on which to generate random numbers.
+        vocab_size (int): The size of the vocabulary used for generating random numbers.
+        state (torch.Tensor): The current state of the random number generator.
+        generator (torch.Generator): The generator used for generating random numbers.
+    """
     @abstractmethod
     def __init__(self, secret_key, devices, vocab_size):
         self.secret_key = secret_key
@@ -25,12 +40,23 @@ class Randomness(ABC):
         self.generator = torch.Generator("cpu")
 
     def reset(self):
+        """
+        Resets the state of the watermark generator to all zeros.
+        """
         l = 1 if type(self.secret_key) != list else len(self.secret_key)
         self.state = torch.zeros((l,)).long()
 
     def normalize_previous_values(self, previous_values):
-        # Normalize input value
-        if type(previous_values) != torch.Tensor:
+        """
+        Normalize the previous values by padding them with 1s to make them of equal length, and converting them to a tensor.
+
+        Args:
+            previous_values (list or torch.Tensor): The previous values to normalize.
+
+        Returns:
+            torch.Tensor: The normalized previous values as a tensor.
+        """
+        if not isinstance(previous_values, torch.Tensor):
             max_len = max(len(p) for p in previous_values) 
             previous_values = [[1 for _ in range(max_len - len(p))] + p for p in previous_values]
             previous_values = torch.tensor(previous_values)
@@ -105,7 +131,21 @@ class Randomness(ABC):
 
 
 class EmbeddedRandomness(Randomness):
+    """
+    A class that represents embedded randomness.
 
+    Args:
+        Randomness (class): The base class for randomness.
+
+    Attributes:
+        hash_len (int): The length of the hash.
+        min_hash (bool): A flag indicating whether to use the minimum hash.
+
+    Methods:
+        get_seed(previous_values, ids=None): Returns the seed for the given previous values and IDs.
+        rand_range(seeds, length, device=None): Returns a random value for each index in a range for the given seeds range length.
+        rand_index(seeds, index, device=None): Returns a random value for the given seeds and index.
+    """
     def __init__(self, secret_key, device, vocab_size, hash_len, min_hash):
         super().__init__(secret_key, device, vocab_size)
         self.hash_len = hash_len
@@ -145,7 +185,16 @@ class EmbeddedRandomness(Randomness):
 
 
 class ExternalRandomness(Randomness):
+    """
+    A class representing an external source of randomness for generating watermarks.
 
+    Args:
+        secret_key (Union[str, List[str]]): The secret key used to initialize the random number generator(s).
+        device (torch.device): The device to use for generating random numbers.
+        vocab_size (int): The size of the vocabulary.
+        key_len (int, optional): The length of the secret key. Defaults to 512.
+        random_size (int, optional): The size of the random numbers to generate. Defaults to None.
+    """
     def __init__(self, secret_key, device, vocab_size, key_len=512, random_size = None):
         self.key_len = key_len
         super().__init__(secret_key, device, vocab_size)
