@@ -1,17 +1,18 @@
+import multiprocessing
 import os
-import sys
 import re
+import signal
+import sys
+from dataclasses import replace
+
 from tqdm import tqdm
 
-import multiprocessing
-import signal
-
-from dataclasses import replace
-from watermark_benchmark.utils.classes import Generation 
+from watermark_benchmark.utils.classes import Generation
 
 
 def writer_process(queue, config, w_count):
-    from watermark_benchmark.utils import setup_randomness, get_output_file
+    from watermark_benchmark.utils import get_output_file, setup_randomness
+
     setup_randomness(config)
     outfilepath = get_output_file(config)
 
@@ -22,7 +23,7 @@ def writer_process(queue, config, w_count):
             return
 
         with open(outfilepath, "a") as outfile:
-            outfile.write("\n".join(str(gen) for gen in task)+"\n")
+            outfile.write("\n".join(str(gen) for gen in task) + "\n")
 
 
 def rating_process(config, generations, writer_queue, device):
@@ -39,29 +40,64 @@ def rating_process(config, generations, writer_queue, device):
         None
     """
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
 
     # Imports
+    import torch
+
     from watermark_benchmark.servers import get_model
-    from watermark_benchmark.utils import setup_randomness, get_server_args
+    from watermark_benchmark.utils import get_server_args, setup_randomness
+
+    torch.set_num_threads(1)
 
     setup_randomness(config)
 
     # Setup server
-    config.model = 'meta-llama/Llama-2-7b-chat-hf'
+    config.model = "meta-llama/Llama-2-7b-chat-hf"
     config.max_new_tokens = 8
     config.dtype = "float16"
     config.num_return_sequences = 1
     inference_engine = config.engine
     server = get_model(inference_engine, config, **get_server_args(config))
-
+    tokenizer = server.tokenizer()
+    tokenizer.pad_token = tokenizer.eos_token
 
     tasks = []
     for generation in generations:
-        tasks.append(prompt.format(generation.prompt.replace("[/INST]","").replace("[INST]","").replace("<<SYS>>",""), generation.response))
+        tasks.append(
+            prompt.format(
+                generation.prompt.replace("[/INST]", "")
+                .replace("[INST]", "")
+                .replace("<<SYS>>", "")
+                .replace("<</SYS>>", "")
+                .replace(
+                    "You are a helpful assistant. Always answer in the most accurate way.",
+                    "",
+                )
+                .strip(),
+                generation.response,
+            )
+        )
+
+    # Clip sequences that are too long
+    max_token_length = 4000
+    for i in tqdm(range(len(tasks)), total=len(tasks), desc="Encoding"):
+        task = tasks[i]
+        if len(task) > max_token_length:
+            encoded_task = tokenizer(task)["input_ids"]
+            if len(encoded_task) > max_token_length:
+                print(
+                    "Warning: Task too long ({} tokens), clipping to {} tokens".format(
+                        len(encoded_task), max_token_length
+                    )
+                )
+                task = tokenizer.decode(encoded_task[:max_token_length])
+        tasks[i] = task
+
+    print("Encoding done. Ready for rating.")
 
     # Run model
-    outputs = server.run(tasks, config, 0.0, use_tqdm=False)
+    outputs = server.run(tasks, config, 0.0, use_tqdm=True)
     num_regex = re.compile("([0-9]+\.*[0-9]*)")
 
     # Parse outputs
@@ -75,30 +111,70 @@ def rating_process(config, generations, writer_queue, device):
                 raw = 0
         elif len(matches) == 1:
             raw = float(matches[0]) / 100
-        raw = max(min(raw,1),0)
+        raw = max(min(raw, 1), 0)
 
+        if idx >= len(generations):
+            print(
+                "Warning: Received more outputs than generations ({} vs {})".format(
+                    len(outputs), len(generations)
+                )
+            )
+            break
         generations[idx] = replace(generations[idx], rating=raw)
 
     # Write to file
     writer_queue.put(generations)
 
 
-
 def run(config_file, generations=None):
-
-    from watermark_benchmark.utils import load_config, setup_randomness, get_input_file, get_output_file
+    from watermark_benchmark.utils import (
+        get_input_file,
+        get_output_file,
+        load_config,
+        setup_randomness,
+    )
 
     # load config
-    config = load_config(config_file) if type(config_file) == str else config_file
+    config = (
+        load_config(config_file) if type(config_file) == str else config_file
+    )
     setup_randomness(config)
 
     # load generations
-    generations = Generation.from_file(get_input_file(config)) if not generations else generations
+    generations = (
+        Generation.from_file(get_input_file(config))
+        if not generations
+        else generations
+    )
     outfilepath = get_output_file(config)
     if not os.path.exists(outfilepath):
         Generation.to_file(outfilepath)
-    existing = {str((g.watermark.to_dict(True, True) if g.watermark is not None else g.temp, g.id, g.attack)) for g in Generation.from_file(outfilepath)}
-    tasks = [g for g in generations if str((g.watermark.to_dict(True, True) if g.watermark is not None else g.temp, g.id, g.attack)) not in existing]
+    existing = {
+        str(
+            (
+                g.watermark.to_dict(True, True)
+                if g.watermark is not None
+                else g.temp,
+                g.id,
+                g.attack,
+            )
+        )
+        for g in Generation.from_file(outfilepath)
+    }
+    tasks = [
+        g
+        for g in generations
+        if str(
+            (
+                g.watermark.to_dict(True, True)
+                if g.watermark is not None
+                else g.temp,
+                g.id,
+                g.attack,
+            )
+        )
+        not in existing
+    ]
 
     if not len(tasks):
         return
@@ -109,11 +185,19 @@ def run(config_file, generations=None):
     writer_queue = global_manager.Queue()
 
     for idx, device in enumerate(config.get_devices()):
-        local_gens = tasks[idx*ct:(idx+1)*ct]
-        processes.append(multiprocessing.Process(target=rating_process, args=(config, local_gens, writer_queue, device)))
+        local_gens = tasks[idx * ct : (idx + 1) * ct]
+        processes.append(
+            multiprocessing.Process(
+                target=rating_process,
+                args=(config, local_gens, writer_queue, device),
+            )
+        )
         processes[-1].start()
 
-    writer = multiprocessing.Process(target=writer_process, args=(writer_queue, config, len(config.get_devices())))
+    writer = multiprocessing.Process(
+        target=writer_process,
+        args=(writer_queue, config, len(config.get_devices())),
+    )
     writer.start()
 
     # Setup signal handler
@@ -123,7 +207,7 @@ def run(config_file, generations=None):
             p.terminate()
         writer.terminate()
         exit()
-    
+
     signal.signal(signal.SIGINT, graceful_exit)
 
     writer.join()
@@ -135,7 +219,7 @@ def run(config_file, generations=None):
 
 
 def main():
-    multiprocessing.set_start_method('spawn')
+    multiprocessing.set_start_method("spawn")
     run(sys.argv[1])
 
 

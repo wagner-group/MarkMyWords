@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class Watermark(ABC):
     """
     Abstract base class for watermarking algorithms.
@@ -31,7 +32,7 @@ class Watermark(ABC):
         Returns:
             A tensor of processed logits.
         """
-        logits.div_(self.temp)
+        # logits.div_(self.temp)
         return logits
 
     def reset(self):
@@ -55,9 +56,9 @@ class Watermark(ABC):
         """
         rtn = []
         for v in self.verifiers:
-            if 'method' in v.__dict__ and v.method != "regular" and skip_edit:
+            if "method" in v.__dict__ and v.method != "regular" and skip_edit:
                 continue
-            if 'method' in v.__dict__ and v.method != "regular":
+            if "method" in v.__dict__ and v.method != "regular":
                 # Don't use exact for edit distance since it's too slow
                 exact = False
             rtn.append((v.id(), v.verify(tokens, index=index, exact=exact)))
@@ -76,6 +77,9 @@ class Watermark(ABC):
         Returns:
             A list of tuples containing the verifier ID and the verification result.
         """
-        tokens = self.tokenizer.encode(text, add_special_tokens=False, return_tensors='pt').to(self.rng.device)
-        return self.verify(tokens, index=index, exact=exact, skip_edit=skip_edit)
-
+        tokens = self.tokenizer.encode(
+            text, add_special_tokens=False, return_tensors="pt"
+        ).to(self.rng.device)
+        return self.verify(
+            tokens, index=index, exact=exact, skip_edit=skip_edit
+        )
