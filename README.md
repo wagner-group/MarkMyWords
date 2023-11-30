@@ -41,7 +41,7 @@ We define a taxonomy for watermarks in our paper. Buildings blocks for it are al
 A full list of configuration options can be found in `./src/watermark-benchmark/utils/classes.py:ConfigSpec`. A YAML file is expected. Below are the more important options.
 ```
 model: 'meta-llama/Llama-2-7b-chat-hf'              # Which model to use
-engine: 'vllm'                                      # Which backend to use (currently only vllm is supported)
+engine: 'vllm'                                      # Which backend to use (currently vllm and huggingface are supported)
 output: 'generation_results'                        # Folder to write generation results
 watermark: 'watermark_specs'                        # File containing watermarking specs
 seed: 0                                             # Randomness seed
@@ -59,6 +59,4 @@ aggregate_thresholds: [[0.02, 1], [0.1, 1], [0.02, 0.8], [0.1, 0.8], [0.02, -1],
 ## Wishlist
 
 * Binary tests
-* HuggingFace backend
-* Code comments
-* Add LogitProcessor to VLLM main
+* Add LogitProcessor to VLLM project
