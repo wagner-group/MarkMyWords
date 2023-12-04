@@ -17,3 +17,4 @@ run/old/*
 run/.saved_tasks
 run/parallel.yml
 run/static_data/encoding.tsv
+src/watermark_benchmark/perplexity/*

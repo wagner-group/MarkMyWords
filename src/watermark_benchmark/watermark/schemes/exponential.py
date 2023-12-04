@@ -53,11 +53,11 @@ class ExponentialGenerator(Watermark):
         # print("Next token choice: {} | {} (P = {})".format(next_token.cpu(), hash_values.min(dim=-1).cpu(), probs[next_token.to(probs.device)].cpu()))
 
         local_logits[:] = -math.inf
-        local_logits[torch.arange(logits.shape[0]), next_token] = 0
+        local_logits[torch.arange(local_logits.shape[0]), next_token] = 0
 
         # print("Next tokens: {}".format(next_token))
 
-        return logits
+        return local_logits
 
 
 class ExponentialVerifier(Verifier):

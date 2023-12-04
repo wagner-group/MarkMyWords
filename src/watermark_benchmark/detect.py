@@ -185,18 +185,12 @@ def run(config, generations=None):
         )
         for g in Generation.from_file(outfilepath)
     }
-
     duplicated_generations = []
     for g in generations:
         if g.watermark is None:
             duplicated_generations.append(g)
         else:
             for w in g.watermark.sep_verifiers():
-                # if (
-                #     w.verifiers[0].verifier != "Theoretical"
-                #     and w.rng == "Internal"
-                # ):
-                #     continue
                 duplicated_generations.append(replace(g, watermark=w))
 
     specs = {

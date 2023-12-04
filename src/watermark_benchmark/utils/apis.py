@@ -1,14 +1,13 @@
-import os
-import tiktoken
-import openai
-import time
 import math
+import os
+import time
 
+import tiktoken
 import torch
+from openai import OpenAI
 
 from watermark_benchmark.utils.classes import WatermarkSpec
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
 openai_cache = {}
 
 _MAX_TOKENS_BY_MODEL = {
@@ -22,10 +21,41 @@ _MAX_TOKENS_BY_MODEL = {
 
 ### APIS ###
 
-def call_openai(model, temperature, top_p, presence_penalty, frequency_penalty, prompt, system_prompt, max_tokens, timeout, logprobs, echo, openai=openai, cache=openai_cache):
+
+def call_openai(
+    model,
+    temperature,
+    top_p,
+    presence_penalty,
+    frequency_penalty,
+    prompt,
+    system_prompt,
+    max_tokens,
+    timeout,
+    logprobs,
+    echo,
+    client=None,
+    cache=openai_cache,
+):
     # Call openai API and return results
 
-    serialization = str((model, temperature, top_p, presence_penalty, frequency_penalty,prompt, system_prompt, max_tokens, timeout, logprobs))
+    if client is None:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+    serialization = str(
+        (
+            model,
+            temperature,
+            top_p,
+            presence_penalty,
+            frequency_penalty,
+            prompt,
+            system_prompt,
+            max_tokens,
+            timeout,
+            logprobs,
+        )
+    )
 
     if cache is not None and temperature == 0 and serialization in cache:
         return cache[serialization]
@@ -35,19 +65,15 @@ def call_openai(model, temperature, top_p, presence_penalty, frequency_penalty, 
         while retry < 5:
             try:
                 return f(params)
-            except openai.InvalidRequestError as e:
-                print(e)
-                return None
             except Exception as e:
                 if retry > 2:
                     print(f"Error {retry}: {e}")
                 if "Rate limit" in str(e) or "overloaded" in str(e):
                     time.sleep(45)
                 else:
-                    time.sleep(3*retry)
-                params['timeout'] += 3
-                params['request_timeout'] += 3
-                retry+=1
+                    time.sleep(3 * retry)
+                params["timeout"] += 3
+                retry += 1
                 continue
         return None
 
@@ -58,14 +84,13 @@ def call_openai(model, temperature, top_p, presence_penalty, frequency_penalty, 
         "top_p": top_p,
         "max_tokens": max_tokens,
         "timeout": timeout,
-        "request_timeout": timeout,
     }
     if presence_penalty is not None:
         request_params["presence_penalty"] = presence_penalty
     if frequency_penalty is not None:
         request_params["frequency_penalty"] = frequency_penalty
     if logprobs is not None:
-        request_params['logprobs'] = logprobs
+        request_params["logprobs"] = logprobs
 
     if is_chat:
         if system_prompt is not None:
@@ -79,59 +104,84 @@ def call_openai(model, temperature, top_p, presence_penalty, frequency_penalty, 
             ]
 
         request_params["messages"] = messages
-        completion = loop(lambda x: openai.ChatCompletion.create(**x), request_params)
+        completion = loop(
+            lambda x: client.chat.completions.create(**x), request_params
+        )
         if temperature == 0 and cache is not None:
             cache[serialization] = completion
 
         return completion
     else:
-        request_params['echo'] = echo
+        request_params["echo"] = echo
         encoder = tiktoken.encoding_for_model(model)
-        request_params["prompt"] = encoder.decode(encoder.encode(prompt)[:_MAX_TOKENS_BY_MODEL[model]])
-        completion = loop(lambda x: openai.Completion.create(**x), request_params)
+        request_params["prompt"] = encoder.decode(
+            encoder.encode(prompt)[: _MAX_TOKENS_BY_MODEL[model]]
+        )
+        completion = loop(
+            lambda x: client.completions.create(**x), request_params
+        )
 
         if temperature == 0 and cache is not None:
-            cache[serialization] = completion 
+            cache[serialization] = completion
 
         return completion
 
 
-def call_dipper(model, tokenizer, texts):
-    input = {k: v.to('cuda') if type(v) == torch.Tensor else v for k,v in tokenizer.batch_encode_plus(texts, padding=True, return_tensors="pt").items()}
-    orig_size = input['input_ids'].shape[0]
-    batch_size = 1<<(orig_size-1).bit_length()
+def call_dipper(model, tokenizer, texts, device="cpu"):
+    input = {
+        k: v.to(device) if type(v) == torch.Tensor else v
+        for k, v in tokenizer.batch_encode_plus(
+            texts, padding=True, return_tensors="pt"
+        ).items()
+    }
+    orig_size = input["input_ids"].shape[0]
+    batch_size = 1 << (orig_size - 1).bit_length()
 
     text_output = ""
     try:
         while True:
             if orig_size > batch_size:
                 rounds = math.ceil(orig_size / batch_size)
-                round_size=batch_size
+                round_size = batch_size
             else:
                 rounds = 1
-                round_size=orig_size
+                round_size = orig_size
 
             text_output = ""
             error = False
 
             for r in range(rounds):
-                truncated_input = {k: v[r*round_size:(r+1)*round_size] for k,v in input.items()}
+                truncated_input = {
+                    k: v[r * round_size : (r + 1) * round_size]
+                    for k, v in input.items()
+                }
 
-                # Generate! 
+                # Generate!
                 with torch.inference_mode():
                     try:
-                        outputs = model.generate(**truncated_input, max_new_tokens=512)
+                        outputs = model.generate(
+                            **truncated_input, max_new_tokens=512
+                        )
                     except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
-                        if 'out of memory' in str(e) and batch_size == 1:
-                            raise Exception("GPU OOM --- Try using a larger GPU or more GPUs to user DIPPER") from e
-                        elif 'out of memory' in str(e):
+                        if "out of memory" in str(e) and batch_size == 1:
+                            raise Exception(
+                                "GPU OOM --- Try using a larger GPU or more GPUs to user DIPPER"
+                            ) from e
+                        elif "out of memory" in str(e):
                             batch_size = batch_size // 2
                             error = True
                             break
                         else:
                             raise e
-                
-                text_output += " ".join(tokenizer.batch_decode(outputs, skip_special_tokens=True)) + " "
+
+                text_output += (
+                    " ".join(
+                        tokenizer.batch_decode(
+                            outputs, skip_special_tokens=True
+                        )
+                    )
+                    + " "
+                )
 
             if not error:
                 torch.cuda.empty_cache()
@@ -142,30 +192,65 @@ def call_dipper(model, tokenizer, texts):
         print("Dipper error")
         return text_output
 
+
 ### PROCESSES ###
 
+
 def openai_process(openai_queue, api_key=None, cache=None):
-    openai.api_key = api_key
-    os.environ["OPENAI_API_KEY"]= api_key
+    if api_key is not None:
+        client = OpenAI(api_key=api_key)
+    else:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     while True:
         task = openai_queue.get(block=True)
         if task is None:
             return
 
-        model, temperature, top_p, presence_penalty, frequency_penalty, prompt, system_prompt, max_tokens, timeout, logprobs, echo, destination_queue = task
-        destination_queue.put(call_openai(model, temperature, top_p, presence_penalty, frequency_penalty, prompt, system_prompt, max_tokens, timeout, logprobs, echo, openai, cache))
+        (
+            model,
+            temperature,
+            top_p,
+            presence_penalty,
+            frequency_penalty,
+            prompt,
+            system_prompt,
+            max_tokens,
+            timeout,
+            logprobs,
+            echo,
+            destination_queue,
+        ) = task
+        destination_queue.put(
+            call_openai(
+                model,
+                temperature,
+                top_p,
+                presence_penalty,
+                frequency_penalty,
+                prompt,
+                system_prompt,
+                max_tokens,
+                timeout,
+                logprobs,
+                echo,
+                client,
+                cache,
+            )
+        )
 
 
 def dipper_server(queue, devices):
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in devices)
+    device = "cuda" if len(devices) else "cpu"
     import torch
-    from transformers import T5Tokenizer, T5ForConditionalGeneration
-    # Setup env variables
-    os.environ["CUDA_VISIBLE_DEVICES"]=",".join(str(i) for i in devices)
+    from transformers import T5ForConditionalGeneration, T5Tokenizer
 
-    # Load model. Hopefully can fit on a single GPU. If not, this needs to be adapted to use CPU or multi-GPU using a memory map. 
-    tokenizer = T5Tokenizer.from_pretrained('google/t5-v1_1-xxl')
-    model = T5ForConditionalGeneration.from_pretrained("kalpeshk2011/dipper-paraphraser-xxl", torch_dtype=torch.bfloat16).to("cuda")
+    # Load model. Hopefully can fit on a single GPU. If not, this needs to be adapted to use CPU or multi-GPU using a memory map.
+    tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-xxl")
+    model = T5ForConditionalGeneration.from_pretrained(
+        "kalpeshk2011/dipper-paraphraser-xxl", torch_dtype=torch.bfloat16
+    ).to(device)
     model.eval()
 
     # Await tasks
@@ -173,31 +258,37 @@ def dipper_server(queue, devices):
         task = queue.get(block=True)
         if task is None:
             return
-    
+
         texts, destination_queue = task
-        destination_queue.put(call_dipper(model, tokenizer, texts))
+        destination_queue.put(call_dipper(model, tokenizer, texts, device))
 
 
 def translate_process(translation_queue, langs, device):
-
-    os.environ["CUDA_VISIBLE_DEVICES"]=str(device)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
     import argostranslate.package
-    import argostranslate.translate
     import argostranslate.settings
-    
+    import argostranslate.translate
+
     if device != "cpu":
-        os.environ["ARGOS_DEVICE_TYPE"]="cuda"
+        os.environ["ARGOS_DEVICE_TYPE"] = "cuda"
         argostranslate.settings.device = "cuda"
     else:
-        os.environ["ARGOS_DEVICE_TYPE"]="cpu"
+        os.environ["ARGOS_DEVICE_TYPE"] = "cpu"
         argostranslate.settings.device = "cpu"
-    
+
     # Install translation models
     argostranslate.package.update_package_index()
     available_packages = argostranslate.package.get_available_packages()
+
     def install_model(la, lb):
-        package_to_install = next(filter(lambda x: (x.from_code == la and x.to_code == lb), available_packages))
+        package_to_install = next(
+            filter(
+                lambda x: (x.from_code == la and x.to_code == lb),
+                available_packages,
+            )
+        )
         argostranslate.package.install_from_path(package_to_install.download())
+
     for i, li in enumerate(langs):
         for j, lj in enumerate(langs):
             if i == j:
@@ -206,7 +297,6 @@ def translate_process(translation_queue, langs, device):
                 install_model(li, lj)
             except Exception:
                 pass
-
 
     # Get actual models
     pairs = {}
@@ -218,15 +308,14 @@ def translate_process(translation_queue, langs, device):
 
         text, la, lb, dst_queue = task
         if (la, lb) not in pairs:
-            pairs[(la,lb)] = argostranslate.translate.get_translation_from_codes(la, lb)
+            pairs[
+                (la, lb)
+            ] = argostranslate.translate.get_translation_from_codes(la, lb)
 
         try:
-            dst_queue.put(pairs[(la,lb)].translate(text))
+            dst_queue.put(pairs[(la, lb)].translate(text))
         except RuntimeError as e:
             print(e)
             print("Reducing number of CUDA threads")
             translation_queue.put(task)
             return
-
-
-

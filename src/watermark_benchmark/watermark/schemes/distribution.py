@@ -83,6 +83,10 @@ class DistributionShiftVerifier(Verifier):
         tokens = tokens.squeeze()
         cumul = []
         seen = set()
+
+        if not tokens.nelement() or not len(tokens.shape):
+            return [(False, self.gamma, 0.5, 0, 0)]
+
         for i in range(len(tokens)):
             prev_values = tokens[:i]
             current_token = tokens[i].item()

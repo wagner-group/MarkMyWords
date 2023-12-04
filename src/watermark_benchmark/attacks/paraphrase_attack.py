@@ -8,23 +8,19 @@ import pprint
 import shutil
 import sys
 import time
-
 from multiprocessing import Queue
-
-import numpy as np
-import requests
-from lingua import Language, LanguageDetectorBuilder
-
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-import torch
-
-import nltk
-from nltk.tokenize import sent_tokenize
 
 import argostranslate.package
 import argostranslate.translate
+import nltk
+import numpy as np
+import requests
+import torch
+from lingua import Language, LanguageDetectorBuilder
+from nltk.tokenize import sent_tokenize
+from transformers import T5ForConditionalGeneration, T5Tokenizer
 
-from watermark_benchmark.utils.apis import openai_process, call_openai
+from watermark_benchmark.utils.apis import call_openai, openai_process
 
 if __name__ == "__main__":
 
@@ -42,9 +38,9 @@ else:
 logger = logging.getLogger(__name__)
 
 
-
 class ResponseError(Exception):
     """Raised when online API returns an error response."""
+
 
 def loop(f):
     retry = 0
@@ -56,10 +52,10 @@ def loop(f):
         except Exception as e:
             print(e)
             time.sleep(1)
-            retry+=1
+            retry += 1
             continue
     return None
-       
+
 
 class ParaphraseAttack(Attack):
     """Paraphrase attack using automatic tools."""
@@ -77,7 +73,7 @@ class ParaphraseAttack(Attack):
         frequency_penalty: float | None = None,
         translate_lang: str = "French",
         queue: dict | None = None,
-        resp_queue: Queue | None = None
+        resp_queue: Queue | None = None,
     ) -> None:
         """Initialize ParaphraseAttack.
 
@@ -122,7 +118,9 @@ class ParaphraseAttack(Attack):
 
         # Only one model can be used at a time
         models = [hf_model, openai_model, use_google_translate, dipper_model]
-        num_models = sum(int(model is not None and model is not False) for model in models)
+        num_models = sum(
+            int(model is not None and model is not False) for model in models
+        )
         if num_models != 1:
             # models must be exclusive
             raise ValueError(
@@ -141,29 +139,40 @@ class ParaphraseAttack(Attack):
         if self._use_google_translate and queue is None:
             self._init_translate(translate_lang)
 
-
     def _init_translate(self, lang):
         from_code = "en"
         to_code = lang
         argostranslate.package.update_package_index()
         available_packages = argostranslate.package.get_available_packages()
-        package_to_install = next(filter(lambda x: (x.from_code == to_code and x.to_code == from_code), available_packages))
+        package_to_install = next(
+            filter(
+                lambda x: (x.from_code == to_code and x.to_code == from_code),
+                available_packages,
+            )
+        )
         argostranslate.package.install_from_path(package_to_install.download())
-        package_to_install = next(filter(lambda x: (x.from_code == from_code and x.to_code == to_code), available_packages))
+        package_to_install = next(
+            filter(
+                lambda x: (x.from_code == from_code and x.to_code == to_code),
+                available_packages,
+            )
+        )
         argostranslate.package.install_from_path(package_to_install.download())
-
-
 
     def _init_dipper(self):
         if self._dipper and not self._dipper_initialized:
             self._dipper_initialized = True
             # Setting up DIPPER if needed
-            self.tokenizer = T5Tokenizer.from_pretrained('google/t5-v1_1-xxl')
+            self.tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-xxl")
             try:
-                self.model = T5ForConditionalGeneration.from_pretrained("kalpeshk2011/dipper-paraphraser-xxl").cuda()
+                self.model = T5ForConditionalGeneration.from_pretrained(
+                    "kalpeshk2011/dipper-paraphraser-xxl"
+                ).cuda()
                 self.device = "cuda"
             except:
-                self.model = T5ForConditionalGeneration.from_pretrained("kalpeshk2011/dipper-paraphraser-xxl")
+                self.model = T5ForConditionalGeneration.from_pretrained(
+                    "kalpeshk2011/dipper-paraphraser-xxl"
+                )
                 self.device = "cpu"
             self.model.eval()
 
@@ -228,11 +237,38 @@ class ParaphraseAttack(Attack):
         system_prompt = "You are a helpful assistant."
 
         if not self._queue:
-            completion = call_openai(self._openai_model, self._temperature, self._top_p, self._presence_penalty, self._frequency_penalty, prompt, system_prompt, 1024, 10, None, False)
+            completion = call_openai(
+                self._openai_model,
+                self._temperature,
+                self._top_p,
+                self._presence_penalty,
+                self._frequency_penalty,
+                prompt,
+                system_prompt,
+                1024,
+                10,
+                None,
+                False,
+            )
         else:
-            self._queue['openai'].put((self._openai_model, self._temperature, self._top_p, self._presence_penalty, self._frequency_penalty, prompt, system_prompt, 1024, 10, None, False, self._resp_queue))
+            self._queue["openai"].put(
+                (
+                    self._openai_model,
+                    self._temperature,
+                    self._top_p,
+                    self._presence_penalty,
+                    self._frequency_penalty,
+                    prompt,
+                    system_prompt,
+                    1024,
+                    10,
+                    None,
+                    False,
+                    self._resp_queue,
+                )
+            )
             completion = self._resp_queue.get(block=True)
- 
+
         if completion is None:
             return text
 
@@ -284,7 +320,9 @@ class ParaphraseAttack(Attack):
         if self._queue is None:
             answer = argostranslate.translate.translate(text, from_lang, lang)
         else:
-            self._queue['translate'].put((text, from_lang, lang, self._resp_queue))
+            self._queue["translate"].put(
+                (text, from_lang, lang, self._resp_queue)
+            )
             answer = self._resp_queue.get(block=True)
 
         if not back_translate:
@@ -293,7 +331,14 @@ class ParaphraseAttack(Attack):
         return answer
 
     def _run_dipper(
-        self, text: str, lex_diversity=40, order_diversity=60, prefix="", sent_interval=4, **kwargs):
+        self,
+        text: str,
+        lex_diversity=40,
+        order_diversity=60,
+        prefix="",
+        sent_interval=4,
+        **kwargs,
+    ):
         """Paraphrase a text using the DIPPER model.
 
         Args:
@@ -302,9 +347,22 @@ class ParaphraseAttack(Attack):
         order_diversity (int): The order diversity of the output, choose multiples of 20 from 0 to 100. 0 means no diversity, 100 means maximum diversity.
         **kwargs: Additional keyword arguments like top_p, top_k, max_length.
         """
-        assert lex_diversity in [0, 20, 40, 60, 80, 100], "Lexical diversity must be one of 0, 20, 40, 60, 80, 100."
-        assert order_diversity in [0, 20, 40, 60, 80, 100], "Order diversity must be one of 0, 20, 40, 60, 80, 100."
-
+        assert lex_diversity in [
+            0,
+            20,
+            40,
+            60,
+            80,
+            100,
+        ], "Lexical diversity must be one of 0, 20, 40, 60, 80, 100."
+        assert order_diversity in [
+            0,
+            20,
+            40,
+            60,
+            80,
+            100,
+        ], "Order diversity must be one of 0, 20, 40, 60, 80, 100."
 
         lex_code = int(100 - lex_diversity)
         order_code = int(100 - order_diversity)
@@ -318,18 +376,21 @@ class ParaphraseAttack(Attack):
         queries = []
 
         for sent_idx in range(0, len(sentences), sent_interval):
-            curr_sent_window = " ".join(sentences[sent_idx:sent_idx + sent_interval])
+            curr_sent_window = " ".join(
+                sentences[sent_idx : sent_idx + sent_interval]
+            )
             final_input_text = f"lexical = {lex_code}, order = {order_code}"
             final_input_text += f" <sent> {curr_sent_window} </sent>"
             queries.append(final_input_text)
 
         if self._queue is None:
             # Not supported
-            raise NotImplementedError("Dipper is only accessible through the API")
+            raise NotImplementedError(
+                "Dipper is only accessible through the API"
+            )
         else:
             self._queue["dipper"].put((queries, self._resp_queue))
             output = self._resp_queue.get(block=True)
-
 
         return output
 
@@ -337,14 +398,101 @@ class ParaphraseAttack(Attack):
     def get_param_list(reduced=False):
         """See Attack.get_param_list."""
         if not reduced:
-            return [("ParaphraseAttack_GPT3.5", ("default", None, "gpt-3.5-turbo", False, False, 1.0, 1.0, None, None, "fr")), \
-                    ("ParaphraseAttack_Dipper", ("default", None, None, True, False, 1.0, 1.0, None, None, "fr")), \
-                    ("TranslationAttack_French", ("translate", None, None, False, True, 1.0, 1.0, None, None, "fr")), \
-                    ("TranslationAttack_Russian", ("translate", None, None, False, True, 1.0, 1.0, None, None, "ru"))]
+            return [
+                (
+                    "ParaphraseAttack_GPT3.5",
+                    (
+                        "default",
+                        None,
+                        "gpt-3.5-turbo",
+                        False,
+                        False,
+                        1.0,
+                        1.0,
+                        None,
+                        None,
+                        "fr",
+                    ),
+                ),
+                (
+                    "TranslationAttack_French",
+                    (
+                        "translate",
+                        None,
+                        None,
+                        False,
+                        True,
+                        1.0,
+                        1.0,
+                        None,
+                        None,
+                        "fr",
+                    ),
+                ),
+                (
+                    "TranslationAttack_Russian",
+                    (
+                        "translate",
+                        None,
+                        None,
+                        False,
+                        True,
+                        1.0,
+                        1.0,
+                        None,
+                        None,
+                        "ru",
+                    ),
+                ),
+                (
+                    "ParaphraseAttack_Dipper",
+                    (
+                        "default",
+                        None,
+                        None,
+                        True,
+                        False,
+                        1.0,
+                        1.0,
+                        None,
+                        None,
+                        "fr",
+                    ),
+                ),
+            ]
         else:
-            return [("TranslationAttack_French", ("translate", None, None, False, True, 1.0, 1.0, None, None, "fr")), \
-                    ("TranslationAttack_Russian", ("translate", None, None, False, True, 1.0, 1.0, None, None, "ru"))]
-
+            return [
+                (
+                    "TranslationAttack_French",
+                    (
+                        "translate",
+                        None,
+                        None,
+                        False,
+                        True,
+                        1.0,
+                        1.0,
+                        None,
+                        None,
+                        "fr",
+                    ),
+                ),
+                (
+                    "TranslationAttack_Russian",
+                    (
+                        "translate",
+                        None,
+                        None,
+                        False,
+                        True,
+                        1.0,
+                        1.0,
+                        None,
+                        None,
+                        "ru",
+                    ),
+                ),
+            ]
 
     def warp(self, text: str, input_encodings=None) -> str:
         """See Attack.warp."""
@@ -375,11 +523,11 @@ _TEST_TEXT = _TEST_TEXT.strip()
 
 def test():
     """Test ParaphraseAttack. Now just testing google translate"""
-    attack = ParaphraseAttack(*("translate", None, None, False, True, 1.0, 1.0, None, None, "ru"))
+    attack = ParaphraseAttack(
+        *("translate", None, None, False, True, 1.0, 1.0, None, None, "ru")
+    )
     print(_TEST_TEXT)
     print(attack.warp(_TEST_TEXT))
-
-
 
 
 if __name__ == "__main__":

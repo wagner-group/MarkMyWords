@@ -49,15 +49,21 @@ def run(
 
     if GENERATE:
         config.input_file = None
-        config.output_file = config.results + "/generations.tsv"
+        config.output_file = config.results + "/generations{}.tsv".format(
+            "_val" if config.validation else ""
+        )
         gen_wrapper(config, watermarks)
 
     print("### PERTURBING ###")
 
     # Perturb
     if PERTURB:
-        config.input_file = config.results + "/generations.tsv"
-        config.output_file = config.results + "/perturbed.tsv"
+        config.input_file = config.results + "/generations{}.tsv".format(
+            "_val" if config.validation else ""
+        )
+        config.output_file = config.results + "/perturbed{}.tsv".format(
+            "_val" if config.validation else ""
+        )
         generations = Generation.from_file(config.input_file)
         perturb_wrapper(config, generations)
 
@@ -65,8 +71,12 @@ def run(
 
     # Rate
     if RATE:
-        config.input_file = config.results + "/perturbed.tsv"
-        config.output_file = config.results + "/rated.tsv"
+        config.input_file = config.results + "/perturbed{}.tsv".format(
+            "_val" if config.validation else ""
+        )
+        config.output_file = config.results + "/rated{}.tsv".format(
+            "_val" if config.validation else ""
+        )
         generations = Generation.from_file(config.input_file)
         rate_wrapper(config, generations)
 
@@ -74,18 +84,26 @@ def run(
 
     # Detect
     if DETECT:
-        config.input_file = config.results + "/rated.tsv"
-        config.output_file = config.results + "/detect.tsv"
+        config.input_file = config.results + "/rated{}.tsv".format(
+            "_val" if config.validation else ""
+        )
+        config.output_file = config.results + "/detect{}.tsv".format(
+            "_val" if config.validation else ""
+        )
         generations = Generation.from_file(config.input_file)
         detect_wrapper(config, generations)
         generations = Generation.from_file(config.output_file)
+    else:
+        generations = Generation.from_file(
+            config.results
+            + "/detect{}.tsv".format("_val" if config.validation else "")
+        )
 
     return generations
 
 
 def main():
     config = load_config(sys.argv[1])
-    config.validation = False
     with open(config.watermark) as infile:
         watermarks = [
             replace(WatermarkSpec.from_str(l.strip()), tokenizer=config.model)
@@ -100,10 +118,3 @@ def main():
     summary_run(config, generations)
 
     return
-
-    # config.validation = True
-    # config.output += '_validation'
-    # config.done_tasks += '_validation'
-    # validation_generations = run(config, watermarks)
-
-    # summary_run(config, validation_generations)

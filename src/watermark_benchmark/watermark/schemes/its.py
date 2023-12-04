@@ -139,8 +139,9 @@ class InverseTransformEmpiricalVerifier(EmpiricalVerifier):
         random_values = random_values[0, :, 0]
         # torch.rand(random_values[0,:,0].shape).to(random_values.device)
         tokens = tokens.squeeze()
-        if not tokens.nelement():
+        if not tokens.nelement() or not len(tokens.shape):
             return None
+
         inv_permutation = self.rng.get_permutation(tokens.device, True)
         rtn = (
             (

@@ -217,6 +217,8 @@ class EmpiricalVerifier(Verifier):
             list: A list of tuples containing the verification results.
         """
         tokens = tokens.to(self.rng.device)
+        if not len(tokens.shape) or not tokens.nelement():
+            return [(False, 0, 0, 0)]
 
         if type(self.rng) == ExternalRandomness:
             xi = self.rng.xi[index].to(self.rng.device).unsqueeze(0)
@@ -234,6 +236,7 @@ class EmpiricalVerifier(Verifier):
                     axis=0,
                 ).unsqueeze(0)
             else:
+
                 randomness = torch.cat(
                     tuple(
                         self.rng.rand_index(
