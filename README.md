@@ -1,6 +1,7 @@
 # Mark My Words
 
 Project homepage: https://wagner-group.github.io/projects/markmywords/index.html
+Paper link: https://arxiv.org/abs/2312.00273
 
 A benchmark for LLM watermarking schemes. Python 3.9 or higher required. 
 
