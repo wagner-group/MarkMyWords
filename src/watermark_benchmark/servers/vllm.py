@@ -6,7 +6,7 @@ import torch
 from vllm import (
     LLM,
     DefaultLogitProcessor,
-    InputMetadata,
+    SamplingMetadata,
     LogitProcessor,
     SamplingParams,
 )
@@ -63,7 +63,7 @@ class VLLMServer(Server, LogitProcessor):
         """
         if not self.ray:
             for worker in self.server.llm_engine.workers:
-                worker.model.sampler.processor = self
+                worker.model_runner.model.sampler.processor = self
         else:
             self.server.llm_engine._run_workers(
                 "update_logit_processor", get_all_outputs=True, processor=self
@@ -93,7 +93,7 @@ class VLLMServer(Server, LogitProcessor):
         self.watermark_engine = watermark_engine
 
     def process(
-        self, logits: torch.Tensor, input_metadata: InputMetadata
+        self, logits: torch.Tensor, sampling_metadata: SamplingMetadata
     ) -> torch.Tensor:
         """
         Processes the logits.
@@ -106,20 +106,20 @@ class VLLMServer(Server, LogitProcessor):
         - torch.Tensor: The processed logits.
         """
         prev_token_ids = [
-            input_metadata.seq_data[seq_id].get_token_ids()
-            for seq_group in input_metadata.seq_groups
+            sampling_metadata.seq_data[seq_id].get_token_ids()
+            for seq_group in sampling_metadata.seq_groups
             for seq_id in seq_group[0]
         ]
         ids = [
             seq_id - self.max_idx
-            for seq_group in input_metadata.seq_groups
+            for seq_group in sampling_metadata.seq_groups
             for seq_id in seq_group[0]
         ]
 
         self.stats.update(logits, ids)
         if self.watermark_engine is not None:
             logits = self.watermark_engine.process(logits, prev_token_ids, ids)
-        LogitProcessor._apply_temperatures(logits, input_metadata)
+        LogitProcessor._apply_temperatures(logits, sampling_metadata)
         return logits
 
     def run(
