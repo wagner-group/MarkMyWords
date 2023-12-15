@@ -15,7 +15,7 @@ nltk.download('omw-1.4')
 
 setup(
     name="watermark-benchmark",
-    version="0.1,0",
+    version="0.1",
     description="Benchmark for LLM watermarks",
     long_description="Benchmark for LLM watermarkss",
     packages=find_packages("src", exclude=["tests*"]),
