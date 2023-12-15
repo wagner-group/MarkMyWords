@@ -17,6 +17,7 @@ from watermark_benchmark.utils.classes import (
 )
 from watermark_benchmark.utils.summarize import (
     find_threshold,
+    ideal_quality_hull,
     summarize_robustness,
     verify_threshold,
 )
@@ -209,6 +210,21 @@ def run(config_file, generations=None):
         else:
             for thsd in config.aggregate_thresholds:
                 thresholds[axis][thsd] = find_threshold(agg, thsd, baselines)
+
+            # New metric
+            optimal_points = {
+                w: v.selected
+                for w, v in ideal_quality_hull(
+                    agg, baselines, [config.max_new_tokens, 0.5]
+                ).items()
+            }
+            with open(prefix + "/optimal_points.tsv", "w") as outfile:
+                outfile.write("parameter\ttemp\twatermark")
+                for (model, temp), selected in optimal_points.items():
+                    for value in selected:
+                        outfile.write(
+                            "\t{}\t{}\t{}\n".format(model, temp, value)
+                        )
 
     with open(prefix + "/thresholds.pkl", "wb") as outfile:
         dill.dump(thresholds, outfile)

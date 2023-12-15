@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import numpy as np
 from scipy.spatial import ConvexHull
+from scipy.spatial._qhull import QhullError
 
 from .classes import Hull, Robustness
 
@@ -24,7 +25,7 @@ def mad(l):
     return np.median([abs(v - median) for v in l])
 
 
-def prepare_for_hull(d, bounds, baselines, direction=None):
+def prepare_for_hull(d, bounds, baselines, direction=None, add_points=True):
     N = len(bounds)
     if not direction:
         direction = [1 for _ in range(N)]
@@ -53,6 +54,11 @@ def prepare_for_hull(d, bounds, baselines, direction=None):
         [b / bounds[i] for b in baselines[i]] for i in range(len(bounds))
     ]
     baselines = np.array(baselines)
+
+    if not add_points:
+        if values is None:
+            return [], keys
+        return values, keys
 
     # Add achievable extermes
     if len(direction) == 2:
@@ -139,8 +145,10 @@ def get_area(face, projection_direction=None):
         return 0.5 * np.linalg.norm(get_normal(face, normalize=False))
 
 
-def convex_hull(d, bounds, baseline_quality, direction=None):
-    values, keys = prepare_for_hull(d, bounds, baseline_quality, direction)
+def convex_hull(d, bounds, baseline_quality, direction=None, add_points=True):
+    values, keys = prepare_for_hull(
+        d, bounds, baseline_quality, direction, add_points=add_points
+    )
 
     # Get convex hull
     ch = ConvexHull(values)
@@ -283,6 +291,37 @@ def summarize_robustness(stats, threshold=0.8, existing_hull=None):
         )
 
     return summary
+
+
+def ideal_quality_hull(data, baselines, maximums=[1024, 0.5], threshold=0.01):
+    rtn = {}
+    for (model, temp), points in data.items():
+        points = {
+            w: tuple(v[1:])
+            for w, v in points.items()
+            if (baselines[temp] - v[0]) / baselines[temp] <= threshold
+        }
+
+        local_max_size = min(maximums[0], max(p[0] for p in points.values()))
+        local_min_size = min(p[0] for p in points.values())
+        local_max_tr = max(p[1] for p in points.values())
+        local_min_tr = min(p[1] for p in points.values())
+        try:
+            hull = convex_hull(
+                points,
+                maximums,
+                (
+                    (local_max_size, local_min_size),
+                    (local_min_tr, local_max_tr),
+                ),
+                direction=[-1, 1],
+                add_points=False,
+            )
+        except QhullError:
+            hull = Hull(0, None, None, None, [], None)
+
+        rtn[(model, temp)] = hull
+    return rtn
 
 
 def find_convex_hull(data, baselines, max_seq_len, ignore_robustness=False):
