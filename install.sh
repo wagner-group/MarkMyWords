@@ -23,6 +23,8 @@ cd ../..
 # Install specific versions of packages for VLLM compatibility
 pip install lingua-language-detector tiktoken transformers scikit-learn nltk pyinflect accelerate openai textattack pandas dacite dahuffman argostranslate
 
+pip install starlette==0.27.0
+
 echo "=> Installing vllm..."
 cd submodules/vllm || exit 1
 python setup.py install || exit 1
