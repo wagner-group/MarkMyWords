@@ -116,18 +116,21 @@ class VLLMServer(Server, LogitProcessor):
             for seq_id in seq_group[0]
         ]
 
-        if logits.shape[0] != len(ids):
+        logits_copy = logits.clone()
+
+        if self.watermark_engine is not None:
+            logits = self.watermark_engine.process(logits, prev_token_ids, ids)
+
+        if logits_copy.shape[0] != len(ids):
             prompt_embeddings = {
                 id: v.prompt_token_ids[1:]
                 for id, v in sampling_metadata.seq_data.items()
                 if v.prompt_token_ids is not None
             }
-            self.stats.update(logits, ids, prompt_embeddings=prompt_embeddings)
+            self.stats.update(logits_copy, ids, logits.argmax(dim=-1), prompt_embeddings=prompt_embeddings)
         else:
-            self.stats.update(logits, ids)
+            self.stats.update(logits_copy, ids, logits.argmax(dim=-1))
 
-        if self.watermark_engine is not None:
-            logits = self.watermark_engine.process(logits, prev_token_ids, ids)
         LogitProcessor._apply_temperatures(logits, sampling_metadata)
         return logits
 
@@ -161,7 +164,7 @@ class VLLMServer(Server, LogitProcessor):
             n=config.num_return_sequences,
             **kwargs,
         )
-        self.stats = Stats(len(inputs), temp)
+        self.stats = Stats(len(inputs), temp, config.logprobs)
         outputs = self.server.generate(inputs, params, use_tqdm=use_tqdm)
 
         if len(outputs) != len(inputs):
@@ -195,6 +198,10 @@ class VLLMServer(Server, LogitProcessor):
                     if output.prompt_logprobs is not None
                     else None
                 ),
+                self.stats.logprobs[int(output.request_id) - self.max_idx]
+                if config.logprobs
+                else None,
+                original_tokens=output.outputs[0].token_ids,
             )
             for i, output in enumerate(outputs)
         ]

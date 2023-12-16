@@ -76,7 +76,7 @@ class ExponentialVerifier(Verifier):
         super().__init__(rng, pvalue, tokenizer)
         self.log = log
 
-    def _verify(self, tokens, index=0):
+    def _verify(self, tokens, index=0, meta=None):
         cumul = []
         seen = set()
 
@@ -138,7 +138,7 @@ class ExponentialEmpiricalVerifier(EmpiricalVerifier):
         super().__init__(rng, pvalue, tokenizer, method, gamma, log=log)
         self.log = log
 
-    def score_matrix(self, tokens, random_values, index=0):
+    def score_matrix(self, tokens, random_values, index=0, meta=None):
         """Prepare all possible overlapping of random values (shape KEY_LEN x VOCAB_SIZE) and tokens (shape SEQ_LEN)"""
         tokens = tokens.reshape(-1)
         if not tokens.nelement():
@@ -154,7 +154,7 @@ class ExponentialEmpiricalVerifier(EmpiricalVerifier):
         )
 
     def random_score_matrix(
-        self, tokens, random_shape, shared_randomness, index=0
+        self, tokens, random_shape, shared_randomness, index=0, meta=None
     ):
         """Produce a random score vector (faster to directly sample the random scores than to sample all random values)"""
         # To do: repeat random values when token context is the same

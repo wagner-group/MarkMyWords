@@ -147,6 +147,12 @@ class Generation:
     temp: Optional[float] = None
     prompt_logprobs: Optional[List[Tuple[int, float]]] = None
 
+    # Non printed fields
+    logprobs: Optional[List[float]] = field(default_factory=list, hash=False)
+    original_tokens: Optional[List[int]] = field(
+        default_factory=list, hash=False
+    )
+
     @staticmethod
     def keys() -> List[str]:
         return [
@@ -342,7 +348,11 @@ class BenchmarkResults:
                         str(i)
                         for i in [w]
                         + [v.__dict__[k] for k in base_keys]
-                        + v.robustness.to_list()
+                        + (
+                            v.robustness.to_list()
+                            if v.robustness is not None
+                            else []
+                        )
                     ]
                 )
                 for w, v in s.items()
@@ -520,6 +530,7 @@ class ConfigSpec:
     gpu_memory_utilization: Optional[float] = None
     dtype: Optional[str] = None
     trust_remote_code: Optional[bool] = None
+    logprobs: bool = False
 
     openai_parallelism: Optional[int] = 32
 

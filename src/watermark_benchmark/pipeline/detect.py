@@ -88,16 +88,14 @@ def detect_process(device, config, tasks, writer_queue, custom_builder=None):
 
         try:
             watermark_engine = get_watermark(
-                watermark,
-                tokenizer,
-                binarizer,
-                [0],
-                keys,
-                builder=custom_builder,
+                watermark, tokenizer, binarizer, [0], keys, builder=custom_builder
             )
             for g_idx, g in enumerate(generations):
-                verifier_outputs = watermark_engine.verify_text(
-                    g.response, exact=True, index=key_indices[g_idx]
+                W = watermark_engine.verify_text(
+                    g.response,
+                    exact=True,
+                    index=key_indices[g_idx],
+                    meta={"prompt": g.prompt},
                 )
                 sep_watermarks = watermark.sep_verifiers()
 
