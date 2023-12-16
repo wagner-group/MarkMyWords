@@ -41,7 +41,7 @@ class Watermark(ABC):
         """
         self.rng.reset()
 
-    def verify(self, tokens, index=0, exact=False, skip_edit=False):
+    def verify(self, tokens, index=0, exact=False, meta=None):
         """
         Verifies the watermark in the given tokens.
 
@@ -56,15 +56,15 @@ class Watermark(ABC):
         """
         rtn = []
         for v in self.verifiers:
-            if "method" in v.__dict__ and v.method != "regular" and skip_edit:
-                continue
             if "method" in v.__dict__ and v.method != "regular":
                 # Don't use exact for edit distance since it's too slow
                 exact = False
-            rtn.append((v.id(), v.verify(tokens, index=index, exact=exact)))
+            rtn.append(
+                (v.id(), v.verify(tokens, index=index, exact=exact, meta=meta))
+            )
         return rtn
 
-    def verify_text(self, text, index=0, exact=False, skip_edit=False):
+    def verify_text(self, text, index=0, exact=False, meta=None):
         """
         Verifies the watermark in the given text.
 
@@ -80,6 +80,4 @@ class Watermark(ABC):
         tokens = self.tokenizer.encode(
             text, add_special_tokens=False, return_tensors="pt"
         ).to(self.rng.device)
-        return self.verify(
-            tokens, index=index, exact=exact, skip_edit=skip_edit
-        )
+        return self.verify(tokens, index=index, exact=exact, meta=meta)

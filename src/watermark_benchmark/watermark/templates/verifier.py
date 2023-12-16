@@ -29,7 +29,7 @@ class Verifier(ABC):
         self.tokenizer = tokenizer
 
     @abstractmethod
-    def verify(self, tokens, index=0, exact=False):
+    def verify(self, tokens, index=0, exact=False, meta=None):
         """
         Verifies if a given sequence of tokens contains a watermark.
 
@@ -69,12 +69,12 @@ class EmpiricalVerifier(Verifier):
         self.rand_size = self.rng.vocab_size
 
     @abstractmethod
-    def score_matrix(self, tokens, random_values, index=0):
+    def score_matrix(self, tokens, random_values, index=0, meta=None):
         pass
 
     @abstractmethod
     def random_score_matrix(
-        self, tokens, random_shape, shared_randomness, index=0
+        self, tokens, random_shape, shared_randomness, index=0, meta=None
     ):
         pass
 
@@ -204,7 +204,7 @@ class EmpiricalVerifier(Verifier):
 
         self.precomputed = True
 
-    def verify(self, tokens, index=0, exact=False):
+    def verify(self, tokens, index=0, exact=False, meta=None):
         """
         Verifies if the given text contains a watermark.
 
@@ -222,7 +222,7 @@ class EmpiricalVerifier(Verifier):
 
         if type(self.rng) == ExternalRandomness:
             xi = self.rng.xi[index].to(self.rng.device).unsqueeze(0)
-            scores = self.score_matrix(tokens, xi, index=index)
+            scores = self.score_matrix(tokens, xi, index=index, meta=meta)
         else:
             if self.rand_size > 1:
                 randomness = torch.cat(
@@ -236,7 +236,6 @@ class EmpiricalVerifier(Verifier):
                     axis=0,
                 ).unsqueeze(0)
             else:
-
                 randomness = torch.cat(
                     tuple(
                         self.rng.rand_index(
@@ -248,7 +247,9 @@ class EmpiricalVerifier(Verifier):
                 ).unsqueeze(0)
 
             xi = randomness
-            scores = self.score_matrix(tokens, randomness, index=index)
+            scores = self.score_matrix(
+                tokens, randomness, index=index, meta=meta
+            )
 
         if scores is None:
             return [(False, 0, 0, 0)]
@@ -268,7 +269,7 @@ class EmpiricalVerifier(Verifier):
             # rv = torch.cuda.FloatTensor(100, xi.shape[1], tokens.shape[-1]).uniform_(0,1).to(self.rng.device)
             for _ in range(rc):
                 scores_alt = self.random_score_matrix(
-                    tokens, xi.shape, shared_randomness, index=index
+                    tokens, xi.shape, shared_randomness, index=index, meta=meta
                 )
                 null_result = self.detect(scores_alt)[0]
                 p_val += null_result < test_result

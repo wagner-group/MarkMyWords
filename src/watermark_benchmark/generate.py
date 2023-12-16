@@ -1,11 +1,11 @@
 import multiprocessing
-import signal
 import os
-import sys
-from tqdm import tqdm
 import random
-
+import signal
+import sys
 from dataclasses import replace
+
+from tqdm import tqdm
 
 
 def writer_process(queue, config, w_count):
@@ -45,10 +45,11 @@ def gen_process(config, tasks, writer_queue, device, prompts):
 
     # Imports
     import torch
+
     from watermark_benchmark.servers import get_model
-    from watermark_benchmark.utils import setup_randomness, get_server_args
-    from watermark_benchmark.watermark import get_watermark
+    from watermark_benchmark.utils import get_server_args, setup_randomness
     from watermark_benchmark.utils.bit_tokenizer import Binarization
+    from watermark_benchmark.watermark import get_watermark
 
     setup_randomness(config)
 
@@ -60,7 +61,7 @@ def gen_process(config, tasks, writer_queue, device, prompts):
     def run_instance(watermark, keys, temp):
         # Setup watermark
         setup_randomness(config)
-        watermark_engine = get_watermark(watermark, tokenizer, binarizer, server.devices, keys) if watermark is not None else None
+        watermark_engine = get_watermark(watermark, tokenizer, binarizer, server.devices, keys, model=config.model) if watermark is not None else None
 
         # Install and run
         server.install(watermark_engine)
@@ -84,9 +85,9 @@ def run(config_file, watermarks=None):
         config_file (str): The path to the configuration file.
         watermarks (list): A list of watermarks to use for generating the watermarked text.
     """
-    from watermark_benchmark.utils import load_config, setup_randomness, get_output_file
-    from watermark_benchmark.utils.standardize import standardize
+    from watermark_benchmark.utils import get_output_file, load_config, setup_randomness
     from watermark_benchmark.utils.classes import Generation, WatermarkSpec
+    from watermark_benchmark.utils.standardize import standardize
 
     # Load config
     if type(config_file) == str:

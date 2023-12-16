@@ -133,7 +133,7 @@ class BinaryVerifier(Verifier):
         else:
             self.binarizer = binarizer
 
-    def verify(self, tokens, index=0, exact=False):
+    def verify(self, tokens, index=0, exact=False, meta=None):
         tokens = tokens.squeeze()
         if len(tokens.shape) == 0:
             return [(False, 0, 0, 0)]
@@ -207,7 +207,7 @@ class BinaryEmpiricalVerifier(EmpiricalVerifier):
         else:
             self.binarizer = binarizer
 
-    def score_matrix(self, tokens, random_values, index=0):
+    def score_matrix(self, tokens, random_values, index=0, meta=None):
         if not tokens.nelement():
             return None
 
@@ -271,6 +271,7 @@ class BinaryEmpiricalVerifier(EmpiricalVerifier):
         shared_randomness,
         binary_tokens=None,
         index=0,
+        meta=None,
     ):
         """Produce a random score vector (faster to directly sample the random scores than to sample all random values)"""
         _, L, _ = random_shape

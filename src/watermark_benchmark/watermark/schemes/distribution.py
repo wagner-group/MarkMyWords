@@ -79,7 +79,7 @@ class DistributionShiftVerifier(Verifier):
         super().__init__(rng, pvalue, tokenizer)
         self.gamma = gamma
 
-    def verify(self, tokens, index=0, exact=False):
+    def verify(self, tokens, index=0, exact=False, meta=None):
         tokens = tokens.squeeze()
         cumul = []
         seen = set()
@@ -156,7 +156,7 @@ class DistributionShiftEmpiricalVerifier(EmpiricalVerifier):
         self.gamma = gamma_watermark
         self.rand_size = 1
 
-    def score_matrix(self, tokens, random_values, index=0):
+    def score_matrix(self, tokens, random_values, index=0, meta=None):
         _, L, _ = random_values.shape
         random_values = random_values[0, :, 0].reshape(1, L).cpu()
 
@@ -179,7 +179,7 @@ class DistributionShiftEmpiricalVerifier(EmpiricalVerifier):
         return rtn.float()
 
     def random_score_matrix(
-        self, tokens, random_shape, shared_randomness, index=0
+        self, tokens, random_shape, shared_randomness, index=0, meta=None
     ):
         """Produce a random score vector (faster to directly sample the random scores than to sample all random values)"""
         _, L, _ = random_shape

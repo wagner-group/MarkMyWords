@@ -82,7 +82,7 @@ class InverseTransformVerifier(Verifier):
         super().__init__(rng, pvalue, tokenizer)
         self.log = False
 
-    def verify(self, tokens, index=0, exact=False):
+    def verify(self, tokens, index=0, exact=False, meta=None):
         tokens = tokens.to(self.rng.device).reshape(-1)
 
         if not len(tokens):
@@ -134,7 +134,7 @@ class InverseTransformEmpiricalVerifier(EmpiricalVerifier):
         super().__init__(rng, pvalue, tokenizer, method, gamma, log=False)
         self.rand_size = 1
 
-    def score_matrix(self, tokens, random_values, index=0):
+    def score_matrix(self, tokens, random_values, index=0, meta=None):
         """Prepare all possible overlapping of random values (shape KEY_LEN) and tokens (shape SEQ_LEN)"""
         random_values = random_values[0, :, 0]
         # torch.rand(random_values[0,:,0].shape).to(random_values.device)
@@ -159,7 +159,7 @@ class InverseTransformEmpiricalVerifier(EmpiricalVerifier):
         return rtn
 
     def random_score_matrix(
-        self, tokens, random_shape, shared_randomness, index=0
+        self, tokens, random_shape, shared_randomness, index=0, meta=None
     ):
         """Produce a random score vector (faster to directly sample the random scores than to sample all random values)"""
         _, L, _ = random_shape
