@@ -23,7 +23,6 @@ from watermark_benchmark.watermark.schemes.its import (
     InverseTransformGenerator,
     InverseTransformVerifier,
 )
-from watermark_benchmark.watermark.schemes.test import TestGenerator
 from watermark_benchmark.watermark.templates.generator import Watermark
 from watermark_benchmark.watermark.templates.random import (
     EmbeddedRandomness,
@@ -73,9 +72,6 @@ def get_watermark(
         tokenizer = watermark_spec.tokenizer_engine
 
     key = watermark_spec.secret_key if key is None else key
-
-    if watermark_spec.generator == "test":
-        return TestGenerator(key, watermark_spec.temp)
 
     # Randomness
     rng = None
