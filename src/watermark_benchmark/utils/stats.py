@@ -30,9 +30,11 @@ class Stats:
         self.c[updated_indices] += 1
 
         if self.save_logprobs:
-            for id in ids:
-                local_logprobs = logprobs[id]
-                d = {i: v for i, v in enumerate(local_logprobs.cpu().numpy())}
+            for tensor_id, id in enumerate(ids):
+                local_logprobs = logprobs[tensor_id]
+                if isinstance(local_logprobs, torch.Tensor):
+                    local_logprobs = local_logprobs.squeeze().cpu().numpy()
+                d = {i: v for i, v in enumerate(local_logprobs)}
                 self.logprobs[id].append(d)
 
     def __getitem__(self, indices):
