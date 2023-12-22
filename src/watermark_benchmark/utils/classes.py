@@ -468,6 +468,7 @@ class ConfigSpec:
     gpu_memory_utilization: Optional[float] = None
     dtype: Optional[str] = None
     trust_remote_code: Optional[bool] = None
+    logprobs: Optional[int] = None
 
     def get_devices(self):
         import torch
