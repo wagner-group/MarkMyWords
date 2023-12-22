@@ -332,7 +332,11 @@ class BenchmarkResults:
                         str(i)
                         for i in [w]
                         + [v.__dict__[k] for k in base_keys]
-                        + v.robustness.to_list()
+                        + (
+                            v.robustness.to_list()
+                            if v.robustness is not None
+                            else []
+                        )
                     ]
                 )
                 for w, v in s.items()
