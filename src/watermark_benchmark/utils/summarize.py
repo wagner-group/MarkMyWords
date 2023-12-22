@@ -293,37 +293,6 @@ def summarize_robustness(stats, threshold=0.8, existing_hull=None):
     return summary
 
 
-def ideal_quality_hull(data, baselines, maximums=[1024, 0.5], threshold=0.01):
-    rtn = {}
-    for (model, temp), points in data.items():
-        points = {
-            w: tuple(v[1:])
-            for w, v in points.items()
-            if (baselines[temp] - v[0]) / baselines[temp] <= threshold
-        }
-
-        local_max_size = min(maximums[0], max(p[0] for p in points.values()))
-        local_min_size = min(p[0] for p in points.values())
-        local_max_tr = max(p[1] for p in points.values())
-        local_min_tr = min(p[1] for p in points.values())
-        try:
-            hull = convex_hull(
-                points,
-                maximums,
-                (
-                    (local_max_size, local_min_size),
-                    (local_min_tr, local_max_tr),
-                ),
-                direction=[-1, 1],
-                add_points=False,
-            )
-        except QhullError:
-            hull = Hull(0, None, None, None, [], None)
-
-        rtn[(model, temp)] = hull
-    return rtn
-
-
 def find_convex_hull(data, baselines, max_seq_len, ignore_robustness=False):
     rtn = {}
     for (model, temp), points in data.items():
