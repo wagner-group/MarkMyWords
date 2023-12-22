@@ -151,7 +151,7 @@ class VLLMServer(Server, LogitProcessor):
             n=config.num_return_sequences,
             logprobs=config.logprobs,
         )
-        self.stats = Stats(len(inputs), temp)
+        self.stats = Stats(len(inputs), temp, config.logprobs)
         outputs = self.server.generate(inputs, params, use_tqdm=use_tqdm)
 
         if len(outputs) != len(inputs):
@@ -174,7 +174,10 @@ class VLLMServer(Server, LogitProcessor):
                 None,
                 *self.stats[int(output.request_id) - self.max_idx],
                 temp,
-                output.outputs[0].logprobs
+                self.stats.logprobs[int(output.request_id) - self.max_idx]
+                if config.logprobs
+                else None,
+                original_tokens=output.outputs[0].token_ids,
             )
             for i, output in enumerate(outputs)
         ]

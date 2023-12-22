@@ -144,6 +144,9 @@ class Generation:
     logprobs: Optional[List[Dict[int, float]]] = field(
         default_factory=list, hash=False
     )
+    original_tokens: Optional[List[int]] = field(
+        default_factory=list, hash=False
+    )
 
     @staticmethod
     def keys() -> List[str]:
@@ -468,7 +471,7 @@ class ConfigSpec:
     gpu_memory_utilization: Optional[float] = None
     dtype: Optional[str] = None
     trust_remote_code: Optional[bool] = None
-    logprobs: Optional[int] = None
+    logprobs: bool = False
 
     def get_devices(self):
         import torch
