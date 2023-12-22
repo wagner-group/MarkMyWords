@@ -141,9 +141,7 @@ class Generation:
     temp: Optional[float] = None
 
     # Non printed fields
-    logprobs: Optional[List[Dict[int, float]]] = field(
-        default_factory=list, hash=False
-    )
+    logprobs: Optional[List[float]] = field(default_factory=list, hash=False)
     original_tokens: Optional[List[int]] = field(
         default_factory=list, hash=False
     )

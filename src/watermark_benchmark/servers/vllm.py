@@ -116,9 +116,10 @@ class VLLMServer(Server, LogitProcessor):
             for seq_id in seq_group[0]
         ]
 
-        self.stats.update(logits, ids)
+        logits_copy = logits.clone()
         if self.watermark_engine is not None:
             logits = self.watermark_engine.process(logits, prev_token_ids, ids)
+        self.stats.update(logits_copy, ids, logits.argmax(dim=-1))
         LogitProcessor._apply_temperatures(logits, sampling_metadata)
         return logits
 

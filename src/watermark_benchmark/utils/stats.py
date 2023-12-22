@@ -13,7 +13,7 @@ class Stats:
         self.save_logprobs = logprobs
         self.logprobs = [[] for _ in range(l)]
 
-    def update(self, logits, ids):
+    def update(self, logits, ids, choice=None):
         """To run for every token sampling in order to update entropy"""
         ids = [int(i) for i in ids]
         # t = torch.tensor([self.t for _ in range(logits.shape[0])], \
@@ -29,13 +29,12 @@ class Stats:
         self.e[updated_indices] += -(probs * logprobs).sum(axis=-1).cpu()
         self.c[updated_indices] += 1
 
-        if self.save_logprobs:
+        if self.save_logprobs and choice is not None:
             for tensor_id, id in enumerate(ids):
-                local_logprobs = logprobs[tensor_id]
-                if isinstance(local_logprobs, torch.Tensor):
-                    local_logprobs = local_logprobs.squeeze().cpu().numpy()
-                d = {i: v for i, v in enumerate(local_logprobs)}
-                self.logprobs[id].append(d)
+                logprob = logprobs[tensor_id, choice[tensor_id]]
+                if isinstance(logprob, torch.Tensor):
+                    logprob = logprob.item()
+                self.logprobs[id].append(logprob)
 
     def __getitem__(self, indices):
         if not isinstance(indices, tuple):
