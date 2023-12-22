@@ -106,7 +106,7 @@ def gen_process(config, tasks, writer_queue, device, prompts):
         run_instance(*t)
 
 
-def run(config_file, watermarks=None, save_full=False):
+def run(config_file, watermarks=None, save_full=False, fixed_keys=None):
     """
     This function runs the watermark generation process.
 
@@ -153,9 +153,11 @@ def run(config_file, watermarks=None, save_full=False):
     prompts = [standardize(config.model, s, p) for p, s in raw_prompts]
 
     unique_temps, tasks = set(), []
-    for watermark in watermarks:
+    for w_idx, watermark in enumerate(watermarks):
         # Randomly sample key if needed
-        if watermark.randomize:
+        if fixed_keys is not None:
+            keys = fixed_keys[w_idx]
+        elif watermark.randomize:
             keys = [random.randint(0, 1000000) for _ in prompts]
         else:
             keys = [watermark.secret_key for _ in prompts]
