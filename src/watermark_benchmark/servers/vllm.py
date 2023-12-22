@@ -6,8 +6,8 @@ import torch
 from vllm import (
     LLM,
     DefaultLogitProcessor,
-    SamplingMetadata,
     LogitProcessor,
+    SamplingMetadata,
     SamplingParams,
 )
 
@@ -172,7 +172,8 @@ class VLLMServer(Server, LogitProcessor):
                 None,
                 None,
                 *self.stats[int(output.request_id) - self.max_idx],
-                temp
+                temp,
+                output.outputs[0].logprobs
             )
             for i, output in enumerate(outputs)
         ]

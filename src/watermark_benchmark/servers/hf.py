@@ -148,6 +148,7 @@ class HFServer(Server, LogitsProcessor):
                                     + j
                                 ],
                                 temp,
+                                [],
                             )
                             for j, output in enumerate(outputs)
                         ]

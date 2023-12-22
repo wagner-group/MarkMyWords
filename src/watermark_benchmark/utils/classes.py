@@ -140,6 +140,11 @@ class Generation:
     spike_entropy: Optional[float] = None
     temp: Optional[float] = None
 
+    # Non printed fields
+    logprobs: Optional[List[Dict[int, float]]] = field(
+        default_factory=list, hash=False
+    )
+
     @staticmethod
     def keys() -> List[str]:
         return [
