@@ -149,7 +149,6 @@ class VLLMServer(Server, LogitProcessor):
             temperature=temp,
             max_tokens=config.max_new_tokens,
             n=config.num_return_sequences,
-            logprobs=config.logprobs,
         )
         self.stats = Stats(len(inputs), temp, config.logprobs)
         outputs = self.server.generate(inputs, params, use_tqdm=use_tqdm)
