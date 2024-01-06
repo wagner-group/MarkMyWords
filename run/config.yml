@@ -7,7 +7,7 @@ watermark: 'watermark_specs'
 max_new_tokens: 1024
 distributed: False
 seed: 0
-huffman_coding: 'static_data/encoding.tsv' 
+huffman_coding: 'static_data/encodings/llama_2_encoding.tsv' 
 
 # Perturb parameters
 paraphrase: False

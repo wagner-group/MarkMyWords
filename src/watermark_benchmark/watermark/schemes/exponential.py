@@ -6,6 +6,7 @@ import scipy
 import torch
 import torch.nn.functional as F
 
+from watermark_benchmark.utils.classes import VerifierOutput
 from watermark_benchmark.watermark.templates.generator import Watermark
 from watermark_benchmark.watermark.templates.verifier import (
     EmpiricalVerifier,
@@ -29,7 +30,7 @@ class ExponentialGenerator(Watermark):
         super().__init__(rng, verifiers, tokenizer, temp)
         self.skip_prob = skip_prob
 
-    def process(self, logits, previous_tokens, ids):
+    def _process(self, logits, previous_tokens, ids):
         # print("Previous tokens: {}".format([p[-1] for p in previous_tokens]))
         # print(id(self))
 
@@ -75,13 +76,10 @@ class ExponentialVerifier(Verifier):
         super().__init__(rng, pvalue, tokenizer)
         self.log = log
 
-    def verify(self, tokens, index=0, exact=False):
-        tokens = tokens.squeeze()
+    def _verify(self, tokens, index=0):
         cumul = []
         seen = set()
 
-        if not tokens.numel():
-            return [(False, 0.5, 0.5, 0, 0)]
         try:
             for i, tok in enumerate(tokens):
                 prev_values = tokens[:i]
@@ -93,15 +91,11 @@ class ExponentialVerifier(Verifier):
 
                 seen.add((seed[0], hv))
                 cumul.append((hv, i))
+            assert len(cumul)
         except Exception:
-            cumul = []
+            return VerifierOutput()
 
-        if not len(cumul):
-            return [(False, 0.5, 0.5, 0, 0)]
-
-        rtn = []
-        ctr = 0
-        ctn = 0
+        return_value, ctr, ctn = VerifierOutput(), 0, 0
         for i, val in enumerate(cumul):
             ctn += 1
             ctr += val[0] if not self.log else -np.log(max(0.00001, 1 - val[0]))
@@ -113,15 +107,8 @@ class ExponentialVerifier(Verifier):
             else:
                 # pval = s(ctr, loc=0.5, scale=1/math.sqrt(12*(ctn))) if not self.log else scipy.stats.gamma.sf(ctr, ctn)
                 pval = scipy.stats.gamma.sf(ctr, ctn)
-            rtn.append(
-                (
-                    pval < self.pvalue,
-                    ctr / ctn if not self.log else ctr,
-                    pval,
-                    i + 1,
-                )
-            )
-        return rtn
+            return_value.update(i + 1, pval)
+        return return_value
 
     def id(self):
         base = super().id()

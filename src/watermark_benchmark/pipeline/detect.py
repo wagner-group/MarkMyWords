@@ -1,4 +1,3 @@
-import math
 import multiprocessing
 import os
 import random
@@ -8,6 +7,14 @@ import traceback
 from dataclasses import replace
 
 from tqdm import tqdm
+
+from watermark_benchmark.utils import (
+    get_input_file,
+    get_output_file,
+    load_config,
+    setup_randomness,
+)
+from watermark_benchmark.utils.classes import Generation
 
 
 def writer_process(queue, config, w_count):
@@ -24,39 +31,15 @@ def writer_process(queue, config, w_count):
 
         full, reduced = task
 
-        with open(outfilepath, "a") as outfile:
+        with open(outfilepath, "a", encoding="utf-8") as outfile:
             outfile.write("\n".join(str(gen) for gen in full) + "\n")
 
         if len(reduced):
-            with open(detailed, "a") as outfile:
+            with open(detailed, "a", encoding="utf-8") as outfile:
                 outfile.write("\n".join(str(gen) for gen in reduced) + "\n")
 
 
-import math
-
-
-def get_efficiency(w, pval):
-    """
-    Returns the efficiency of a watermark detection algorithm given a list of watermark scores and a p-value threshold.
-
-    Args:
-        w (list): A list of tuples representing watermark scores. Each tuple contains four values: the document ID, the watermark score, the p-value, and the detection time.
-        pval (float): The p-value threshold used to determine whether a watermark has been detected.
-
-    Returns:
-        float: The efficiency of the watermark detection algorithm, defined as the detection time of the last detected watermark.
-    """
-    if w[-1][2] > pval:
-        return math.inf
-
-    idx = len(w) - 1
-    while idx >= 0 and w[idx][2] <= pval:
-        idx -= 1
-
-    return w[idx + 1][3]
-
-
-def detect_process(device, config, tasks, writer_queue):
+def detect_process(device, config, tasks, writer_queue, custom_builder=None):
     """
     Detects watermarks in the given tasks using the specified device and configuration.
 
@@ -94,6 +77,7 @@ def detect_process(device, config, tasks, writer_queue):
         setup_randomness(config)
         _, generations = task
         watermark = generations[0].watermark
+        print(f"Working on {watermark}")
         reduced, full = [], []
         unique_keys, keys, key_indices = {}, [], []
         for g in generations:
@@ -104,22 +88,29 @@ def detect_process(device, config, tasks, writer_queue):
 
         try:
             watermark_engine = get_watermark(
-                watermark, tokenizer, binarizer, [0], keys
+                watermark,
+                tokenizer,
+                binarizer,
+                [0],
+                keys,
+                builder=custom_builder,
             )
             for g_idx, g in enumerate(generations):
-                W = watermark_engine.verify_text(
+                verifier_outputs = watermark_engine.verify_text(
                     g.response, exact=True, index=key_indices[g_idx]
                 )
                 sep_watermarks = watermark.sep_verifiers()
 
-                for w_i, w in enumerate(W):
-                    pvalue = w[1][-1][2]
-                    eff = get_efficiency(w[1], watermark.pvalue)
+                for verifier_index, verifier_output in enumerate(
+                    verifier_outputs.values()
+                ):
+                    pvalue = verifier_output.get_pvalue()
+                    eff = verifier_output.get_efficiency(watermark.pvalue)
                     full.append(
                         replace(
                             g,
                             watermark=replace(
-                                sep_watermarks[w_i], secret_key=g.key
+                                sep_watermarks[verifier_index], secret_key=g.key
                             ),
                             pvalue=pvalue,
                             efficiency=eff,
@@ -130,13 +121,14 @@ def detect_process(device, config, tasks, writer_queue):
                             replace(
                                 g,
                                 response="",
-                                token_count=v[3],
-                                pvalue=v[2],
+                                token_count=t_c,
+                                pvalue=p_val,
                                 watermark=replace(
-                                    sep_watermarks[w_i], secret_key=g.key
+                                    sep_watermarks[verifier_index],
+                                    secret_key=g.key,
                                 ),
                             )
-                            for v in w[1]
+                            for t_c, p_val in verifier_output.pvalues.items()
                         ]
                     )
 
@@ -150,22 +142,10 @@ def detect_process(device, config, tasks, writer_queue):
                 print(f"\n\n\n##### RUNTIME ERROR for {watermark} #####\n\n\n")
                 print(traceback.format_exc())
 
-        except Exception:
-            print(f"\n\n\n##### ERROR for {watermark} #####\n\n\n")
-            print(traceback.format_exc())
 
-
-def run(config, generations=None):
-    from watermark_benchmark.utils import (
-        get_input_file,
-        get_output_file,
-        load_config,
-        setup_randomness,
-    )
-    from watermark_benchmark.utils.classes import Generation
-
+def run(config, generations=None, custom_builder=None):
     # load config
-    config = load_config(config) if type(config) == str else config
+    config = load_config(config) if isinstance(config, str) else config
     setup_randomness(config)
 
     # load generations
@@ -250,6 +230,7 @@ def run(config, generations=None):
                         config,
                         t,
                         writer_queue,
+                        custom_builder,
                     ),
                 )
             )
@@ -261,7 +242,7 @@ def run(config, generations=None):
         for p in detect_processes:
             p.terminate()
         writer.terminate()
-        exit()
+        sys.exit()
 
     signal.signal(signal.SIGINT, graceful_exit)
 
@@ -269,7 +250,45 @@ def run(config, generations=None):
     for p in detect_processes:
         p.terminate()
 
+    return Generation.from_file(get_output_file(config))
+
 
 def main():
     multiprocessing.set_start_method("spawn")
     run(sys.argv[1])
+
+
+def detect(config_file, generations, custom_builder=None):
+    """
+    Standalone perturb procedure.
+
+    Args:
+        config_file (str or ConfigSpec): Config file or path to config file
+        generations (list of Generation or None): List of generations to perturb.
+        custom_builder (function or None): Custom builder function for watermark instantiation.
+
+    If config does not contain a results directory, it will be created.
+    This procedure sets the appropriate input and output files for the generation procedure.
+
+    Return:
+        generations (list): A list of generations.
+        config (ConfigSpec): The updated configuration object.
+    """
+    if multiprocessing.get_start_method() != "spawn":
+        multiprocessing.set_start_method("spawn")
+    config = (
+        load_config(config_file)
+        if isinstance(config_file, str)
+        else config_file
+    )
+    config.input_file = config.results + "/rated{}.tsv".format(
+        "_val" if config.validation else ""
+    )
+    config.output_file = config.results + "/detect{}.tsv".format(
+        "_val" if config.validation else ""
+    )
+
+    if generations is None:
+        generations = Generation.from_file(get_input_file(config))
+
+    return run(config, generations, custom_builder), config

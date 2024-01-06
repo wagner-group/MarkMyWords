@@ -5,6 +5,7 @@ import scipy
 import torch
 import torch.nn.functional as F
 
+from watermark_benchmark.utils.classes import VerifierOutput
 from watermark_benchmark.watermark.templates.generator import Watermark
 from watermark_benchmark.watermark.templates.random import ExternalRandomness
 from watermark_benchmark.watermark.templates.verifier import (
@@ -34,7 +35,7 @@ class InverseTransformGenerator(Watermark):
         self.skip_prob = skip_prob
         self.ctr = None
 
-    def process(self, logits, previous_tokens, ids):
+    def _process(self, logits, previous_tokens, ids):
         # Truncate unused logits
         if random.random() < self.skip_prob:
             return logits
@@ -82,12 +83,7 @@ class InverseTransformVerifier(Verifier):
         super().__init__(rng, pvalue, tokenizer)
         self.log = False
 
-    def verify(self, tokens, index=0, exact=False):
-        tokens = tokens.to(self.rng.device).reshape(-1)
-
-        if not len(tokens):
-            return [(False, 0.5, 0.5, 0, 0)]
-
+    def _verify(self, tokens, index=0):
         if type(self.rng) == ExternalRandomness:
             xi = self.rng.xi[index].to(self.rng.device)[:, 0]
         else:
@@ -117,16 +113,16 @@ class InverseTransformVerifier(Verifier):
         )
 
         if not len(scores):
-            return [(False, 0.5, 0.5, 0, 0)]
+            return VerifierOutput()
 
-        rtn = []
+        return_value = VerifierOutput()
         for i, val in enumerate(scores.tolist()):
             pval = scipy.stats.norm.cdf(
                 val / (i + 1), loc=1 / 3, scale=2 / (math.sqrt(18 * (i + 1)))
             )
-            rtn.append((pval < self.pvalue, val / (i + 1), pval, i + 1))
+            return_value.update(i + 1, pval)
 
-        return rtn
+        return return_value
 
 
 class InverseTransformEmpiricalVerifier(EmpiricalVerifier):

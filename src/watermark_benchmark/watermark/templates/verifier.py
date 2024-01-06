@@ -1,50 +1,86 @@
+import math
 from abc import ABC, abstractmethod
+from typing import Optional, Tuple
 
 import hash_cpp
 import numpy as np
 import torch
+from transformers import PreTrainedTokenizerBase
 
-from watermark_benchmark.watermark.templates.random import ExternalRandomness
+from watermark_benchmark.utils import adapt_arguments
+from watermark_benchmark.utils.classes import VerifierOutput
+from watermark_benchmark.watermark.templates.random import (
+    BaseRandomness,
+    EmbeddedRandomness,
+    Randomness,
+)
 
 
 class Verifier(ABC):
     """
     Abstract base class for watermark verifiers.
+
+    Attributes:
+        * rng: An instance of a random number generator.
+        * pvalue: The p-value of the verifier.
+        * tokenizer: An instance of the tokenizer used for the LLM.
+
+    Methods to implement:
+        * _verify:
+        Verifies if a given sequence of tokens contains a watermark. Returns a VerifierOutput object,
+        that contains the detection pvalue for each subsequence of the input tokens.
+
+    Other methods:
+        * verify:
+        wrapper around _verify
+
+        * id:
+        returns a unique identifier for the verifier
     """
 
-    @abstractmethod
-    def __init__(self, rng, pvalue, tokenizer):
+    def __init__(
+        self,
+        rng: Optional[BaseRandomness] = None,
+        pvalue: Optional[float] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+    ):
         """
         Initializes the Verifier object.
-
-        :param rng: The random number generator to use.
-        :type rng: Random
-        :param pvalue: The p-value to use for the verification.
-        :type pvalue: float
-        :param tokenizer: The tokenizer to use for splitting text into tokens.
-        :type tokenizer: Tokenizer
         """
         self.pvalue = pvalue
         self.rng = rng
         self.tokenizer = tokenizer
 
-    @abstractmethod
-    def verify(self, tokens, index=0, exact=False):
+    def verify(
+        self, tokens: torch.Tensor, index: int = 0, **kwargs
+    ) -> VerifierOutput:
         """
         Verifies if a given sequence of tokens contains a watermark.
-
-        :param tokens: The sequence of tokens to verify.
-        :type tokens: list of str
-        :param index: The starting index to search for the watermark.
-        :type index: int
-        :param exact: Whether to search for an exact match of the watermark or a partial match.
-        :type exact: bool
-        :return: True if the watermark is found, False otherwise.
-        :rtype: bool
         """
-        pass
+        if self.rng is not None:
+            tokens = tokens.to(self.rng.device)
+        tokens = tokens.reshape(-1)
 
-    def id(self):
+        if not len(tokens.shape) or not len(tokens) or tokens.nelement() < 2:
+            return VerifierOutput()
+
+        kwargs["index"] = index
+        return adapt_arguments(self._verify, kwargs, tokens)
+
+    @abstractmethod
+    def _verify(self, tokens: torch.Tensor, index: int = 0) -> VerifierOutput:
+        """
+        Verifies if the given text contains a watermark.
+
+        Args:
+            tokens (torch.Tensor): The text to verify.
+            index (int, optional): The index of the text. Defaults to 0. Used to recover the secret key in the rng.
+
+        Returns:
+            list: A list of tuples containing the verification results.
+        """
+
+    def id(self) -> Tuple[float, str, str]:
         """
         Returns a unique identifier for the verifier.
 
@@ -61,12 +97,23 @@ class EmpiricalVerifier(Verifier):
     """
 
     @abstractmethod
-    def __init__(self, rng, pvalue, tokenizer, method, gamma, log):
+    def __init__(
+        self,
+        rng: Randomness,
+        pvalue: float,
+        tokenizer: PreTrainedTokenizerBase,
+        method: str,
+        gamma: float,
+        log: bool,
+    ):
         super().__init__(rng, pvalue, tokenizer)
         self.method = method
         self.precomputed = False
-        self.gamma_edit = gamma if not log else np.log(gamma)
+        self.gamma_edit = (
+            gamma if not log else (np.log(gamma) if gamma > 0 else -math.inf)
+        )
         self.rand_size = self.rng.vocab_size
+        self.precomputed_results = None
 
     @abstractmethod
     def score_matrix(self, tokens, random_values, index=0):
@@ -105,7 +152,7 @@ class EmpiricalVerifier(Verifier):
             torch.Tensor: The computed distance.
         """
         KL, SL = scores.shape
-        if type(self.rng) == ExternalRandomness:
+        if not isinstance(self.rng, EmbeddedRandomness):
             indices = (
                 torch.vstack(
                     (
@@ -146,7 +193,7 @@ class EmpiricalVerifier(Verifier):
             torch.Tensor: The computed distance.
         """
         KL, SL = scores.shape
-        if type(self.rng) == ExternalRandomness:
+        if not isinstance(self.rng, EmbeddedRandomness):
             container = (
                 torch.zeros((KL, SL + 1, SL + 1)).float().to(self.rng.device)
             )
@@ -185,7 +232,7 @@ class EmpiricalVerifier(Verifier):
             self.rng.device
         )
         tokens = torch.randint(0, self.rng.vocab_size, (max_len,))
-        if type(self.rng) == ExternalRandomness:
+        if not isinstance(self.rng, EmbeddedRandomness):
             shared_randomness = (
                 torch.arange(self.rng.key_len)
                 .repeat(1 + max_len // self.rng.key_len)[:max_len]
@@ -204,7 +251,7 @@ class EmpiricalVerifier(Verifier):
 
         self.precomputed = True
 
-    def verify(self, tokens, index=0, exact=False):
+    def _verify(self, tokens, index=0, exact=False):
         """
         Verifies if the given text contains a watermark.
 
@@ -216,11 +263,9 @@ class EmpiricalVerifier(Verifier):
         Returns:
             list: A list of tuples containing the verification results.
         """
-        tokens = tokens.to(self.rng.device)
-        if not len(tokens.shape) or not tokens.nelement():
-            return [(False, 0, 0, 0)]
+        verifier_output = VerifierOutput()
 
-        if type(self.rng) == ExternalRandomness:
+        if not isinstance(self.rng, EmbeddedRandomness):
             xi = self.rng.xi[index].to(self.rng.device).unsqueeze(0)
             scores = self.score_matrix(tokens, xi, index=index)
         else:
@@ -236,7 +281,6 @@ class EmpiricalVerifier(Verifier):
                     axis=0,
                 ).unsqueeze(0)
             else:
-
                 randomness = torch.cat(
                     tuple(
                         self.rng.rand_index(
@@ -251,7 +295,7 @@ class EmpiricalVerifier(Verifier):
             scores = self.score_matrix(tokens, randomness, index=index)
 
         if scores is None:
-            return [(False, 0, 0, 0)]
+            return verifier_output
 
         test_result = self.detect(scores)[0]
         p_val = torch.zeros_like(test_result).to(self.rng.device)
@@ -259,7 +303,7 @@ class EmpiricalVerifier(Verifier):
         if exact:
             rc = 100
             # Before simlating random seeds, we need to figure out which tokens will share the same randomness
-            if type(self.rng) == ExternalRandomness:
+            if not isinstance(self.rng, EmbeddedRandomness):
                 shared_randomness = torch.arange(self.rng.key_len)
             else:
                 _, shared_randomness = xi[0, :, 0].unique(return_inverse=True)
@@ -287,12 +331,11 @@ class EmpiricalVerifier(Verifier):
                 test_result = test_result[: null_result.shape[-1]]
             p_val = (null_result < test_result).sum(axis=0)
 
-        rtn = []
         for idx, val in enumerate(p_val.cpu().numpy()):
-            rtn.append((val / rc <= self.pvalue, val / rc, val / rc, idx))
+            verifier_output.update(idx, val / rc)
 
         self.rng.reset()
-        return rtn
+        return verifier_output
 
     def id(self):
         """

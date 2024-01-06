@@ -239,20 +239,51 @@ def run(config_file, generations=None):
     with open(prefix + "/aggregate_results.tsv", "w") as outfile:
         outfile.write(AggregateResults.to_tsv(aggregate_results))
 
+    threshold_points = set()
     with open(prefix + "/thresholds_results.tsv", "w") as outfile:
         for axis in thresholds:
             for thsd in thresholds[axis]:
                 for key, val in thresholds[axis][thsd].items():
+                    threshold_points.add(key)
                     outfile.write(
                         "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
                             axis, key, *thsd, val[0], *val[1]
                         )
                     )
 
+    # Return summary of all watermarks (summary), threshold_results, and selected points
+    return summary, aggregate_results, threshold_points
+
 
 def main():
     run(sys.argv[1])
 
 
-if __name__ == "__main__":
-    main()
+def summarize(config_file, generations):
+    """
+    Standalone perturb procedure.
+
+    Args:
+        config_file (str or ConfigSpec): Config file or path to config file
+        generations (list of Generation or None): List of generations to perturb.
+        custom_builder (function or None): Custom builder function for watermark instantiation.
+
+    If config does not contain a results directory, it will be created.
+    This procedure sets the appropriate input and output files for the generation procedure.
+
+    Return:
+        (summary, aggregate_results, threshold_points): Output summary
+        config (ConfigSpec): The updated configuration object.
+    """
+    config = (
+        load_config(config_file)
+        if isinstance(config_file, str)
+        else config_file
+    )
+    if generations is None:
+        generations = Generation.from_file(
+            config.results
+            + "/detect{}.tsv".format("_val" if config.validation else "")
+        )
+
+    return run(config, generations), config
