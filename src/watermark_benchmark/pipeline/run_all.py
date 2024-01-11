@@ -3,38 +3,45 @@ import os
 import sys
 from dataclasses import replace
 
-multiprocessing.set_start_method("spawn")
 from watermark_benchmark.utils import load_config
 from watermark_benchmark.utils.classes import Generation, WatermarkSpec
 
+from .summarize import run as summary_run
 
-def gen_wrapper(config, watermarks):
+
+def gen_wrapper(config, watermarks, custom_builder=None):
     config.baseline = True
-    from watermark_benchmark.generate import run as gen_run
+    from .generate import run as gen_run
 
-    gen_run(config, watermarks)
+    gen_run(config, watermarks, custom_builder)
 
 
-def detect_wrapper(config, generations):
-    from watermark_benchmark.detect import run as detect_run
+def detect_wrapper(config, generations, custom_builder=None):
+    from .detect import run as detect_run
 
-    detect_run(config, generations)
+    detect_run(config, generations, custom_builder)
 
 
 def perturb_wrapper(config, generations):
-    from watermark_benchmark.perturb import run as perturb_run
+    from .perturb import run as perturb_run
 
     perturb_run(config, generations)
 
 
 def rate_wrapper(config, generations):
-    from watermark_benchmark.quality import run as rate_run
+    from .quality import run as rate_run
 
     rate_run(config, generations)
 
 
 def run(
-    config, watermarks, GENERATE=True, PERTURB=True, RATE=True, DETECT=True
+    config,
+    watermarks,
+    custom_builder=None,
+    GENERATE=True,
+    PERTURB=True,
+    RATE=True,
+    DETECT=True,
 ):
     # Generation
     generations = []
@@ -52,7 +59,7 @@ def run(
         config.output_file = config.results + "/generations{}.tsv".format(
             "_val" if config.validation else ""
         )
-        gen_wrapper(config, watermarks)
+        gen_wrapper(config, watermarks, custom_builder)
 
     print("### PERTURBING ###")
 
@@ -91,7 +98,7 @@ def run(
             "_val" if config.validation else ""
         )
         generations = Generation.from_file(config.input_file)
-        detect_wrapper(config, generations)
+        detect_wrapper(config, generations, custom_builder)
         generations = Generation.from_file(config.output_file)
     else:
         generations = Generation.from_file(
@@ -103,18 +110,49 @@ def run(
 
 
 def main():
+    multiprocessing.set_start_method("spawn")
     config = load_config(sys.argv[1])
-    with open(config.watermark) as infile:
+    with open(config.watermark, encoding="utf-8") as infile:
         watermarks = [
             replace(WatermarkSpec.from_str(l.strip()), tokenizer=config.model)
             for l in infile.read().split("\n")
             if len(l)
         ]
-    generations = run(config, watermarks)
-
-    # Summary
-    from watermark_benchmark.summarize import run as summary_run
+    generations = run(
+        config, watermarks)
 
     summary_run(config, generations)
 
-    return
+
+def full_pipeline(
+    config_file, watermarks, custom_builder=None, run_validation=False
+):
+    multiprocessing.set_start_method("spawn")
+    config = (
+        load_config(config_file)
+        if isinstance(config_file, str)
+        else config_file
+    )
+    if isinstance(watermarks, str):
+        with open(config.watermark, encoding="utf-8") as infile:
+            watermarks = [
+                replace(
+                    WatermarkSpec.from_str(line.strip()), tokenizer=config.model
+                )
+                for line in infile.read().split("\n")
+                if len(line)
+            ]
+
+    generations = run(config, watermarks, custom_builder)
+
+    if not run_validation:
+        return summary_run(config, generations)
+
+    _, _, validation_watermarks = summary_run(config, generations)
+
+    # Validation
+    print("#### STARTING VALIDATION ####")
+    config.validation = True
+    generations = run(config, validation_watermarks)
+
+    return summary_run(config, generations)

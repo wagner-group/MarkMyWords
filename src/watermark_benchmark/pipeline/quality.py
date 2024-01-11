@@ -7,6 +7,12 @@ from dataclasses import replace
 
 from tqdm import tqdm
 
+from watermark_benchmark.utils import (
+    get_input_file,
+    get_output_file,
+    load_config,
+    setup_randomness,
+)
 from watermark_benchmark.utils.classes import Generation
 
 
@@ -127,16 +133,11 @@ def rating_process(config, generations, writer_queue, device):
 
 
 def run(config_file, generations=None):
-    from watermark_benchmark.utils import (
-        get_input_file,
-        get_output_file,
-        load_config,
-        setup_randomness,
-    )
-
     # load config
     config = (
-        load_config(config_file) if type(config_file) == str else config_file
+        load_config(config_file)
+        if isinstance(config_file, str)
+        else config_file
     )
     setup_randomness(config)
 
@@ -214,8 +215,7 @@ def run(config_file, generations=None):
     for p in processes:
         p.terminate()
 
-    print("Finished all tasks, exiting")
-    # graceful_exit(None, None)
+    return Generation.from_file(get_output_file(config))
 
 
 def main():
@@ -224,3 +224,39 @@ def main():
 
 
 prompt = "[INST] <<SYS>> You are given a prompt and a response, and you provide a grade out of 100 measuring the quality of the response, in terms of accuracy, level of details, and typographical, grammatical and lexical correctness. Remove points as soon as one of the criteria is missed. <</SYS>> Prompt: {}\nResponse: {}[/INST] Grade: "
+
+
+def rate(config_file, generations):
+    """
+    Standalone perturb procedure.
+
+    Args:
+        config_file (str or ConfigSpec): Config file or path to config file
+        generations (list of Generation or None): List of generations to perturb.
+
+    If config does not contain a results directory, it will be created.
+    This procedure sets the appropriate input and output files for the generation procedure.
+
+    Return:
+        generations (list): A list of generations.
+        config (ConfigSpec): The updated configuration object.
+    """
+    if multiprocessing.get_start_method() != "spawn":
+        multiprocessing.set_start_method("spawn")
+
+    config = (
+        load_config(config_file)
+        if isinstance(config_file, str)
+        else config_file
+    )
+    config.input_file = config.results + "/perturbed{}.tsv".format(
+        "_val" if config.validation else ""
+    )
+    config.output_file = config.results + "/rated{}.tsv".format(
+        "_val" if config.validation else ""
+    )
+
+    if generations is None:
+        generations = Generation.from_file(get_input_file(config))
+
+    return run(config, generations), config

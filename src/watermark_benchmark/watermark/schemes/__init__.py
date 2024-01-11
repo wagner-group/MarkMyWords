@@ -1,1 +1,1 @@
-__all__ = ['exponential', 'distribution', 'binary', 'its']
+__all__ = ["exponential", "distribution", "binary", "its"]

@@ -1,4 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Dict, List, Optional, Tuple, Union
+
+from torch import Tensor
+from transformers import PreTrainedTokenizerBase
+
+from watermark_benchmark.utils.classes import VerifierOutput
+from watermark_benchmark.watermark.templates.random import BaseRandomness
+from watermark_benchmark.watermark.templates.verifier import Verifier
 
 
 class Watermark(ABC):
@@ -6,21 +14,46 @@ class Watermark(ABC):
     Abstract base class for watermarking algorithms.
 
     Attributes:
-        rng: An instance of the random number generator.
+        rng: An instance of a random number generator.
         verifiers: A list of verification algorithms.
         tokenizer: An instance of the tokenizer.
         temp: A temperature parameter used in the watermarking process.
+
+    Methods to implement:
+        * _process
+        Use the logits, previous tokens and generation ids to generate the next token watemarked logits
+
+    Other methods:
+        * process
+        wrapper around _process
+
+        * verify:
+        calls the verification procedure in each of the verifiers
+
+        * verify_text:
+        encodes the list of texts and calls verify
     """
 
-    @abstractmethod
-    def __init__(self, rng, verifiers, tokenizer, temp):
+    def __init__(
+        self,
+        rng: BaseRandomness,
+        verifiers: Union[List[Verifier], Verifier],
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        temp: float = 1.0,
+    ):
         self.rng = rng
         self.verifiers = verifiers
         self.tokenizer = tokenizer
         self.temp = temp
+        if isinstance(self.verifiers, Verifier):
+            self.verifiers = [self.verifiers]
 
-    @abstractmethod
-    def process(self, logits, previous_tokens, ids):
+    def process(
+        self,
+        logits: Tensor,
+        previous_tokens: Tensor,
+        ids: Tensor,
+    ) -> Tensor:
         """
         Abstract method for processing logits.
 
@@ -32,8 +65,11 @@ class Watermark(ABC):
         Returns:
             A tensor of processed logits.
         """
-        # logits.div_(self.temp)
-        return logits
+        return self._process(logits, previous_tokens, ids)
+
+    @abstractmethod
+    def _process(self, logits, previous_tokens, ids):
+        pass
 
     def reset(self):
         """
@@ -41,7 +77,9 @@ class Watermark(ABC):
         """
         self.rng.reset()
 
-    def verify(self, tokens, index=0, exact=False, skip_edit=False):
+    def verify(
+        self, tokens, skip_edit=False, **kwargs
+    ) -> Dict[Tuple[float, str, str], VerifierOutput]:
         """
         Verifies the watermark in the given tokens.
 
@@ -54,17 +92,16 @@ class Watermark(ABC):
         Returns:
             A list of tuples containing the verifier ID and the verification result.
         """
-        rtn = []
+        rtn = {}
         for v in self.verifiers:
             if "method" in v.__dict__ and v.method != "regular" and skip_edit:
                 continue
             if "method" in v.__dict__ and v.method != "regular":
-                # Don't use exact for edit distance since it's too slow
-                exact = False
-            rtn.append((v.id(), v.verify(tokens, index=index, exact=exact)))
+                kwargs["exact"] = False
+            rtn[v.id()] = v.verify(tokens, **kwargs)
         return rtn
 
-    def verify_text(self, text, index=0, exact=False, skip_edit=False):
+    def verify_text(self, text, skip_edit=False, **kwargs):
         """
         Verifies the watermark in the given text.
 
@@ -80,6 +117,4 @@ class Watermark(ABC):
         tokens = self.tokenizer.encode(
             text, add_special_tokens=False, return_tensors="pt"
         ).to(self.rng.device)
-        return self.verify(
-            tokens, index=index, exact=exact, skip_edit=skip_edit
-        )
+        return self.verify(tokens, skip_edit=skip_edit, **kwargs)

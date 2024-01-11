@@ -1,5 +1,6 @@
 # utils folder
 
+import inspect
 import random
 
 import numpy as np
@@ -54,3 +55,22 @@ def get_input_file(config):
 def get_tokenizer(model):
     # Return HF tokenizer
     return AutoTokenizer.from_pretrained(model)
+
+
+def adapt_arguments(function, kwargs, *non_keyword_args):
+    # Return the function with the kwargs if they are included in the signature
+    function_signature = inspect.getfullargspec(function)
+    if function_signature.varargs is not None:
+        raise ValueError(
+            f"{function.__name__} function does not accept varargs. Please use kwargs instead."
+        )
+    if function_signature.varkw is not None:
+        filtered_kwargs = kwargs
+    else:
+        filtered_kwargs = {
+            kw: val
+            for kw, val in kwargs.items()
+            if kw in function_signature.args
+        }
+
+    return function(*non_keyword_args, **filtered_kwargs)

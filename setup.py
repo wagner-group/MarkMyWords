@@ -1,21 +1,21 @@
-from setuptools import setup, find_packages
 import nltk
+from setuptools import find_packages, setup
 
 
 def get_requirements(path: str):
     requirements = []
     for line in open(path):
-        if not line.startswith('-r'):
+        if not line.startswith("-r"):
             requirements.append(line.strip())
     return requirements
 
 
-nltk.download('punkt')
-nltk.download('omw-1.4')
+nltk.download("punkt")
+nltk.download("omw-1.4")
 
 setup(
     name="watermark-benchmark",
-    version="0.1",
+    version="1.0",
     description="Benchmark for LLM watermarks",
     long_description="Benchmark for LLM watermarkss",
     packages=find_packages("src", exclude=["tests*"]),
@@ -29,13 +29,9 @@ setup(
     package_dir={"": "src"},
     entry_points={
         "console_scripts": [
-            "watermark-benchmark-generate=watermark_benchmark.generate:main",
-            "watermark-benchmark-rate=watermark_benchmark.quality:main",
-            "watermark-benchmark-detect=watermark_benchmark.detect:main",
-            "watermark-benchmark-perturb=watermark_benchmark.perturb:main",
             "watermark-benchmark-generate-huffman=watermark_benchmark.utils.bit_tokenizer:generate_huffman_coding",
             "watermark-benchmark-patch-generations=watermark_benchmark.utils.patch_verifiers:run",
-            "watermark-benchmark-run=watermark_benchmark.run_all:main",
+            "watermark-benchmark-run=watermark_benchmark.pipeline.run_all:main",
         ]
     },
     zip_safe=False,

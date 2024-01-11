@@ -9,6 +9,13 @@ from dataclasses import replace
 from tqdm import tqdm
 
 from watermark_benchmark.attacks.helm_attacks import setup
+from watermark_benchmark.utils import (
+    get_input_file,
+    get_output_file,
+    load_config,
+    setup_randomness,
+)
+from watermark_benchmark.utils.classes import Generation
 
 
 def init_attacks(
@@ -148,18 +155,11 @@ def run(config_file, generations=None):
     """
     import torch
 
-    from watermark_benchmark.utils import (
-        get_input_file,
-        get_output_file,
-        load_config,
-        setup_randomness,
-    )
     from watermark_benchmark.utils.apis import (
         dipper_server,
         openai_process,
         translate_process,
     )
-    from watermark_benchmark.utils.classes import Generation
 
     # Load config
     if type(config_file) == str:
@@ -329,10 +329,45 @@ def run(config_file, generations=None):
     for p in processes:
         p.terminate()
 
-    # print("Finished all tasks, exiting")
-    # graceful_exit(None, None)
+    return Generation.from_file(get_output_file(config))
 
 
 def main():
     multiprocessing.set_start_method("spawn")
     run(sys.argv[1])
+
+
+def perturb(config_file, generations):
+    """
+    Standalone perturb procedure.
+
+    Args:
+        config_file (str or ConfigSpec): Config file or path to config file
+        generations (list of Generation or None): List of generations to perturb.
+
+    If config does not contain a results directory, it will be created.
+    This procedure sets the appropriate input and output files for the generation procedure.
+
+    Return:
+        generations (list): A list of generations.
+        config (ConfigSpec): The updated configuration object.
+    """
+    if multiprocessing.get_start_method() != "spawn":
+        multiprocessing.set_start_method("spawn")
+
+    config = (
+        load_config(config_file)
+        if isinstance(config_file, str)
+        else config_file
+    )
+    config.input_file = config.results + "/generations{}.tsv".format(
+        "_val" if config.validation else ""
+    )
+    config.output_file = config.results + "/perturbed{}.tsv".format(
+        "_val" if config.validation else ""
+    )
+
+    if generations is None:
+        generations = Generation.from_file(get_input_file(config))
+
+    return run(config, generations), config

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import math
 import re
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -87,6 +88,11 @@ class WatermarkSpec:
     # Randomization settings
     randomize: bool = False
     offset: bool = False
+
+    # Custom
+    custom_fields: Optional[Dict[str, Any]] = field(
+        default_factory=dict, hash=False
+    )
 
     def to_dict(self, omit_key=False, omit_verifiers=False) -> Dict:
         d = self.__dict__
@@ -413,6 +419,45 @@ class AggregateResults:
             for v in s
         ]
         return header + "".join(lines)
+
+
+@dataclass(frozen=False)
+class VerifierOutput:
+    """Output from a watermark's verifier"""
+
+    sequence_token_count: int = 0
+    pvalues: Dict[int, float] = field(default_factory=dict, hash=False)
+
+    def update(self, token_index, pvalue):
+        if token_index > self.sequence_token_count:
+            self.sequence_token_count = token_index
+        self.pvalues[token_index] = pvalue
+
+    def get_pvalue(self):
+        return (
+            0.5
+            if not len(self.pvalues)
+            else self.pvalues[self.sequence_token_count]
+        )
+
+    def get_size(self, pvalue):
+        """
+        Returns the size of a watermark detection algorithm given a list of watermark scores and a p-value threshold.
+
+        Returns:
+            float: The efficiency of the watermark detection algorithm, defined as the detection time of the last detected watermark.
+        """
+        if not len(self.pvalues):
+            return math.inf
+
+        if self.pvalues[self.sequence_token_count] > pvalue:
+            return math.inf
+
+        idx = self.sequence_token_count - 1
+        while idx > 0 and idx in self.pvalues and self.pvalues[idx] <= pvalue:
+            idx -= 1
+
+        return idx
 
 
 @dataclass(frozen=False)

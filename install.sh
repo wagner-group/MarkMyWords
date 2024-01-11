@@ -1,7 +1,7 @@
 #!/bin/bash
 
-tar -xvf run/static_data/encoding.tsv.tar.gz
-mv encoding.tsv run/static_data/
+tar -xvf run/static_data/encodings.tar.gz
+mv encodings/ run/static_data/
 
 git submodule init
 git submodule update

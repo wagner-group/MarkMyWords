@@ -1,6 +1,7 @@
 import scipy
 import torch
 
+from watermark_benchmark.utils.classes import VerifierOutput
 from watermark_benchmark.watermark.templates.generator import Watermark
 from watermark_benchmark.watermark.templates.verifier import (
     EmpiricalVerifier,
@@ -32,7 +33,7 @@ class DistributionShiftGeneration(Watermark):
         self.gamma = gamma
         self.temp = temp
 
-    def process(self, logits, previous_tokens, ids):
+    def _process(self, logits, previous_tokens, ids):
         """
         Applies the watermarking scheme to the input logits.
 
@@ -79,15 +80,11 @@ class DistributionShiftVerifier(Verifier):
         super().__init__(rng, pvalue, tokenizer)
         self.gamma = gamma
 
-    def verify(self, tokens, index=0, exact=False):
-        tokens = tokens.squeeze()
+    def _verify(self, tokens, index=0):
         cumul = []
         seen = set()
 
-        if not tokens.nelement() or not len(tokens.shape):
-            return [(False, self.gamma, 0.5, 0, 0)]
-
-        for i in range(len(tokens)):
+        for i, _ in enumerate(tokens):
             prev_values = tokens[:i]
             current_token = tokens[i].item()
 
@@ -107,19 +104,19 @@ class DistributionShiftVerifier(Verifier):
                 cumul.append(0)
 
         if not len(cumul):
-            return [(False, self.gamma, 0.5, 0, 0)]
+            return VerifierOutput()
 
-        rtn = []
         ctr = 0
-        for i in range(len(cumul)):
-            ctr += cumul[i]
+        return_value = VerifierOutput()
+        for i, val in enumerate(cumul):
+            ctr += val
             cnt = i + 1
             nd = scipy.stats.binomtest(
                 ctr, cnt, self.gamma, alternative="greater"
             ).pvalue
-            rtn.append((nd < self.pvalue, ctr / cnt, nd, cnt, i))
+            return_value.update(i, nd)
 
-        return rtn
+        return return_value
 
 
 class DistributionShiftEmpiricalVerifier(EmpiricalVerifier):

@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from watermark_benchmark.utils.bit_tokenizer import Binarization
+from watermark_benchmark.utils.classes import VerifierOutput
 from watermark_benchmark.watermark.templates.generator import Watermark
 from watermark_benchmark.watermark.templates.random import ExternalRandomness
 from watermark_benchmark.watermark.templates.verifier import (
@@ -45,7 +46,7 @@ class BinaryGenerator(Watermark):
         super().reset()
         self.base_len = -1
 
-    def process(self, logits, previous_tokens, ids):
+    def _process(self, logits, previous_tokens, ids):
         previous_tokens = self.rng.normalize_previous_values(previous_tokens)
 
         # Truncate unused logits
@@ -133,24 +134,15 @@ class BinaryVerifier(Verifier):
         else:
             self.binarizer = binarizer
 
-    def verify(self, tokens, index=0, exact=False):
-        tokens = tokens.squeeze()
-        if len(tokens.shape) == 0:
-            return [(False, 0, 0, 0)]
-        binary_tokens = self.binarizer.to_bit(
-            tokens.to(self.rng.device)
-        ).squeeze()
+    def _verify(self, tokens, index=0):
+        return_value = VerifierOutput()
+        binary_tokens = self.binarizer.to_bit(tokens).squeeze()
         mask = binary_tokens >= 0
-        try:
-            max_bitlen = mask.sum(axis=1).max()
-        except Exception as exc:
-            raise Exception("Error with max bitlen") from exc
+        max_bitlen = mask.sum(axis=1).max()
         binary_tokens = binary_tokens[:, :max_bitlen]
         mask = mask[:, :max_bitlen]
         ctn = mask.sum(axis=1)
-
         xi = []
-
         for i in range(tokens.shape[-1]):
             prev_values = tokens[:i]
             bitlen = ctn[i].item()
@@ -170,13 +162,12 @@ class BinaryVerifier(Verifier):
         ctn = mask.sum(axis=1).cumsum(0).tolist()
 
         # Compute average
-        rtn = []
         for i, v in enumerate(cumul):
             c = ctn[i]
             likelihood = scipy.stats.gamma.sf(v, c)
-            rtn.append((likelihood < self.pvalue, v - c, likelihood, i, i))
+            return_value.update(i, likelihood)
 
-        return rtn
+        return return_value
 
 
 class BinaryEmpiricalVerifier(EmpiricalVerifier):
@@ -218,6 +209,8 @@ class BinaryEmpiricalVerifier(EmpiricalVerifier):
 
         # Truncate tokens to max token bit length. For everyting to fit on GPUs, we set a maximum on the truncated length.
         max_bitlen = mask.sum(axis=1).max()
+        if isinstance(max_bitlen, torch.Tensor):
+            max_bitlen = int(max_bitlen.item())
         KL, SL = random_values.shape[1], binary_tokens.shape[0]
         indices = (
             torch.vstack(
@@ -242,11 +235,18 @@ class BinaryEmpiricalVerifier(EmpiricalVerifier):
         for r in range(1 + (max_bitlen // 100)):
             range_low = r * 100
             range_high = min((r + 1) * 100, max_bitlen)
+            if range_high == range_low:
+                continue
             binary_tokens_local = binary_tokens[:, range_low:range_high]
             mask_local = mask[:, range_low:range_high]
-            xi_local = random_values[0, :, range_low:range_high].reshape(
-                -1, range_high - range_low
-            )
+            try:
+                xi_local = random_values[0, :, range_low:range_high].reshape(
+                    -1, range_high - range_low
+                )
+            except:
+                print(random_values.shape)
+                print(range_low)
+                print(range_high)
 
             # Binary tokens has shape SL x L, xi has shape KL x L. We only want to sum coordinates that are not -1.
             v = (
@@ -308,6 +308,8 @@ class BinaryEmpiricalVerifier(EmpiricalVerifier):
         for r in range(1 + (max_bitlen // 100)):
             range_low = r * 100
             range_high = min((r + 1) * 100, max_bitlen)
+            if range_high == range_low:
+                continue
             binary_tokens_local = binary_tokens[:, range_low:range_high]
             mask_local = mask[:, range_low:range_high]
             xi_local = xi[:, range_low:range_high].reshape(
