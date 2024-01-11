@@ -118,14 +118,10 @@ def main():
             for l in infile.read().split("\n")
             if len(l)
         ]
-    generations = run(config, watermarks)
-    _, _, validation_watermarks = summary_run(config, generations)
+    generations = run(
+        config, watermarks)
 
-    # Validation
-    config.validation = True
-    generations = run(config, validation_watermarks)
-
-    return summary_run(config, generations)
+    summary_run(config, generations)
 
 
 def full_pipeline(

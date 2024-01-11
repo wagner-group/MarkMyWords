@@ -105,7 +105,7 @@ def detect_process(device, config, tasks, writer_queue, custom_builder=None):
                     verifier_outputs.values()
                 ):
                     pvalue = verifier_output.get_pvalue()
-                    eff = verifier_output.get_efficiency(watermark.pvalue)
+                    eff = verifier_output.get_size(watermark.pvalue)
                     full.append(
                         replace(
                             g,

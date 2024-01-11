@@ -264,6 +264,7 @@ class EmpiricalVerifier(Verifier):
             list: A list of tuples containing the verification results.
         """
         verifier_output = VerifierOutput()
+        tokens = tokens.unsqueeze(0)
 
         if not isinstance(self.rng, EmbeddedRandomness):
             xi = self.rng.xi[index].to(self.rng.device).unsqueeze(0)

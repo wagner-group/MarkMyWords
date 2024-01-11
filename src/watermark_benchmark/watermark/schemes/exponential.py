@@ -42,9 +42,9 @@ class ExponentialGenerator(Watermark):
         # Compute probabilities and get random values
         probs = F.softmax(local_logits, dim=-1)
         hash_values = self.rng.rand_range(
-            self.rng.get_seed(previous_tokens, ids),
+            self.rng.get_seed(previous_tokens, ids=ids),
             self.rng.vocab_size,
-            probs.device,
+            device=probs.device,
         )
         hash_values = torch.div(-torch.log(hash_values), probs)
 

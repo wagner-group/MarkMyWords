@@ -308,6 +308,8 @@ class BinaryEmpiricalVerifier(EmpiricalVerifier):
         for r in range(1 + (max_bitlen // 100)):
             range_low = r * 100
             range_high = min((r + 1) * 100, max_bitlen)
+            if range_high == range_low:
+                continue
             binary_tokens_local = binary_tokens[:, range_low:range_high]
             mask_local = mask[:, range_low:range_high]
             xi_local = xi[:, range_low:range_high].reshape(

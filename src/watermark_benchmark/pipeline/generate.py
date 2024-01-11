@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from watermark_benchmark.utils import (
     get_output_file,
+    get_server_args,
     load_config,
     setup_randomness,
 )
@@ -24,7 +25,6 @@ def writer_process(queue, config, w_count):
         config (Config): The configuration object.
         w_count (int): The number of watermark generations to write to the file.
     """
-    from watermark_benchmark.utils import get_output_file
 
     outfilepath = get_output_file(config)
 
@@ -57,7 +57,6 @@ def gen_process(
     import torch
 
     from watermark_benchmark.servers import get_model
-    from watermark_benchmark.utils import get_server_args, setup_randomness
     from watermark_benchmark.utils.bit_tokenizer import Binarization
     from watermark_benchmark.watermark import get_watermark
 
