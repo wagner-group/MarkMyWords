@@ -30,6 +30,9 @@ class Stats:
         self.c[updated_indices] += 1
 
         if self.save_logprobs and choice is not None:
+            t = min(self.t, 1e-5)
+            logprobs = torch.log(torch.softmax(logits.div(t), dim=-1, dtype=torch.float))
+            logprobs[probs < 1e-5] = 0
             for tensor_id, id in enumerate(ids):
                 logprob = logprobs[tensor_id, choice[tensor_id]]
                 if isinstance(logprob, torch.Tensor):
