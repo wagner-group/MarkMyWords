@@ -7,7 +7,7 @@ A benchmark for LLM watermarking schemes. Python 3.9 or higher required.
 
 ## Installation
 
-* Recursively clone repo: `git clone --recursive git@github.com:julien-piet/watermark-benchmark.git`
+* Recursively clone repo: `git clone --recursive git@github.com:wagner-group/MarkMyWords.git`
 * Setup python virtual environment: `python3.9 -m venv env && source env/bin/activate`
 * Run installation script: `bash install.sh`
 
