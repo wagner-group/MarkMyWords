@@ -6,8 +6,8 @@ import torch
 from vllm import (
     LLM,
     DefaultLogitProcessor,
-    SamplingMetadata,
     LogitProcessor,
+    SamplingMetadata,
     SamplingParams,
 )
 
@@ -116,7 +116,16 @@ class VLLMServer(Server, LogitProcessor):
             for seq_id in seq_group[0]
         ]
 
-        self.stats.update(logits, ids)
+        if logits.shape[0] != len(ids):
+            prompt_embeddings = {
+                id: v.prompt_token_ids[1:]
+                for id, v in sampling_metadata.seq_data.items()
+                if v.prompt_token_ids is not None
+            }
+            self.stats.update(logits, ids, prompt_embeddings=prompt_embeddings)
+        else:
+            self.stats.update(logits, ids)
+
         if self.watermark_engine is not None:
             logits = self.watermark_engine.process(logits, prev_token_ids, ids)
         LogitProcessor._apply_temperatures(logits, sampling_metadata)
@@ -130,6 +139,7 @@ class VLLMServer(Server, LogitProcessor):
         keys: Optional[List[int]] = None,
         watermark_spec: Optional[WatermarkSpec] = None,
         use_tqdm=False,
+        **kwargs
     ) -> List[Generation]:
         """
         Runs the server.
@@ -149,6 +159,7 @@ class VLLMServer(Server, LogitProcessor):
             temperature=temp,
             max_tokens=config.max_new_tokens,
             n=config.num_return_sequences,
+            **kwargs,
         )
         self.stats = Stats(len(inputs), temp)
         outputs = self.server.generate(inputs, params, use_tqdm=use_tqdm)
@@ -172,7 +183,18 @@ class VLLMServer(Server, LogitProcessor):
                 None,
                 None,
                 *self.stats[int(output.request_id) - self.max_idx],
-                temp
+                temp,
+                (
+                    [
+                        (t, lp[t])
+                        for lp, t in zip(
+                            output.prompt_token_ids[1:],
+                            output.prompt_logprobs[1:],
+                        )
+                    ]
+                    if output.prompt_logprobs is not None
+                    else None
+                ),
             )
             for i, output in enumerate(outputs)
         ]

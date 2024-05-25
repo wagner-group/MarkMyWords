@@ -145,6 +145,7 @@ class Generation:
     entropy: Optional[float] = None
     spike_entropy: Optional[float] = None
     temp: Optional[float] = None
+    prompt_logprobs: Optional[List[Tuple[int, float]]] = None
 
     @staticmethod
     def keys() -> List[str]:
@@ -218,7 +219,16 @@ class Generation:
                 ]
                 and val is not None
             ):
-                val = float(val)
+                try:
+                    val = float(val)
+                except ValueError:
+                    val = tuple(
+                        float(v.strip())
+                        for v in val.replace(")", "")
+                        .replace("(", "")
+                        .split(",")
+                        if len(v)
+                    )
             elif (key == "response" or key == "prompt") and val is not None:
                 val = (
                     re.sub(r"(___LINE___)+$", "___LINE___", val)
@@ -487,6 +497,8 @@ class ConfigSpec:
     devices: Optional[List[int]] = None
     detections_per_gpu: int = 4
 
+    quality_metric: str = "llm"
+
     results: str = "results"
     threshold: float = 0.8
     hull_axis: List[Any] = field(
@@ -508,6 +520,8 @@ class ConfigSpec:
     gpu_memory_utilization: Optional[float] = None
     dtype: Optional[str] = None
     trust_remote_code: Optional[bool] = None
+
+    openai_parallelism: Optional[int] = 32
 
     def get_devices(self):
         import torch

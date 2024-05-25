@@ -1,8 +1,10 @@
 """ Abstract class for adaptor """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any 
+from typing import Any, Dict, List, Optional
+
 from watermark_benchmark.utils.classes import Generation, WatermarkSpec
+
 
 class Server(ABC):
     """
@@ -11,26 +13,26 @@ class Server(ABC):
 
     @abstractmethod
     def install(self, watermark_engine) -> None:
-        """ Install watermark into model """
+        """Install watermark into model"""
         self.device = "cpu"
-        
 
     @abstractmethod
-    def run(self, \
-            inputs: List[str],\
-            config: Dict[str, Any],\
-            temp: float,\
-            keys: Optional[int] = None,
-            ws: Optional[WatermarkSpec] = None) -> List[Generation]:
-        """ Run server """
+    def run(
+        self,
+        inputs: List[str],
+        config: Dict[str, Any],
+        temp: float,
+        keys: Optional[int] = None,
+        ws: Optional[WatermarkSpec] = None,
+        **kwargs
+    ) -> List[Generation]:
+        """Run server"""
         return []
-
 
     @abstractmethod
     def tokenizer(self):
-        """ Return tokenizer """
+        """Return tokenizer"""
         pass
-
 
     def devices(self):
         return self.devices

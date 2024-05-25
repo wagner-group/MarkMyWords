@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import shutil
 import sys
 from dataclasses import replace
 
@@ -38,6 +39,7 @@ def run(
     config,
     watermarks,
     custom_builder=None,
+    no_attack=False,
     GENERATE=True,
     PERTURB=True,
     RATE=True,
@@ -71,8 +73,11 @@ def run(
         config.output_file = config.results + "/perturbed{}.tsv".format(
             "_val" if config.validation else ""
         )
-        generations = Generation.from_file(config.input_file)
-        perturb_wrapper(config, generations)
+        if no_attack:
+            shutil.copyfile(config.input_file, config.output_file)
+        else:
+            generations = Generation.from_file(config.input_file)
+            perturb_wrapper(config, generations)
 
     print("### RATING ###")
 
@@ -118,14 +123,17 @@ def main():
             for l in infile.read().split("\n")
             if len(l)
         ]
-    generations = run(
-        config, watermarks)
+    generations = run(config, watermarks)
 
     summary_run(config, generations)
 
 
 def full_pipeline(
-    config_file, watermarks, custom_builder=None, run_validation=False
+    config_file,
+    watermarks,
+    custom_builder=None,
+    run_validation=False,
+    no_attack=False,
 ):
     multiprocessing.set_start_method("spawn")
     config = (
@@ -143,7 +151,7 @@ def full_pipeline(
                 if len(line)
             ]
 
-    generations = run(config, watermarks, custom_builder)
+    generations = run(config, watermarks, custom_builder, no_attack=no_attack)
 
     if not run_validation:
         return summary_run(config, generations)
@@ -153,6 +161,6 @@ def full_pipeline(
     # Validation
     print("#### STARTING VALIDATION ####")
     config.validation = True
-    generations = run(config, validation_watermarks)
+    generations = run(config, validation_watermarks, no_attack=no_attack)
 
     return summary_run(config, generations)

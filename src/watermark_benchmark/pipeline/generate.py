@@ -240,8 +240,11 @@ def generate(config_file, watermarks, custom_builder=None):
         generations (list): A list of generations.
         config (ConfigSpec): The updated configuration object.
     """
-    if multiprocessing.get_start_method() != "spawn":
+    try:
         multiprocessing.set_start_method("spawn")
+    except RuntimeError:
+        print("Cannot set spawn multiprocessing method.")
+
     config = (
         load_config(config_file)
         if isinstance(config_file, str)

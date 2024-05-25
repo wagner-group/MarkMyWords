@@ -32,6 +32,8 @@ setup(
             "watermark-benchmark-generate-huffman=watermark_benchmark.utils.bit_tokenizer:generate_huffman_coding",
             "watermark-benchmark-patch-generations=watermark_benchmark.utils.patch_verifiers:run",
             "watermark-benchmark-run=watermark_benchmark.pipeline.run_all:main",
+            "watermark-benchmark-openai-eval=watermark_benchmark.utils.openai_quality:main",
+            "watermark-benchmark-standalone-quality=watermark_benchmark.pipeline.quality:main",
         ]
     },
     zip_safe=False,

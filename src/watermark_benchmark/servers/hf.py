@@ -73,6 +73,7 @@ class HFServer(Server, LogitsProcessor):
         keys: Optional[List[int]] = None,
         watermark_spec: Optional[WatermarkSpec] = None,
         use_tqdm=False,
+        **kwargs,
     ) -> List[Generation]:
         """
         Runs the server.
@@ -125,16 +126,20 @@ class HFServer(Server, LogitsProcessor):
                     generations.extend(
                         [
                             Generation(
-                                watermark_spec
-                                if watermark_spec is not None
-                                else None,
-                                keys[
-                                    self.current_offset
-                                    + (i * self.batch_size)
-                                    + j
-                                ]
-                                if keys is not None
-                                else None,
+                                (
+                                    watermark_spec
+                                    if watermark_spec is not None
+                                    else None
+                                ),
+                                (
+                                    keys[
+                                        self.current_offset
+                                        + (i * self.batch_size)
+                                        + j
+                                    ]
+                                    if keys is not None
+                                    else None
+                                ),
                                 None,
                                 self.current_offset + (i * self.batch_size) + j,
                                 output.prompt,
