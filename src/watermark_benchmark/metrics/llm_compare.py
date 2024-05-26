@@ -36,17 +36,31 @@ class LLMCompareRating(RatingMetric):
 
         tasks = []
         for generation in generations:
-            tasks.append(
-                generation.prompt.replace("[/INST]", "")
-                .replace("[INST]", "")
-                .replace("<<SYS>>", "")
-                .replace("<</SYS>>", "")
-                .strip()
-            )
+            if generation.watermark is not None:
+                tasks.append(
+                    generation.prompt.replace("[/INST]", "")
+                    .replace("[INST]", "")
+                    .replace("<<SYS>>", "")
+                    .replace("<</SYS>>", "")
+                    .strip()
+                )
 
-        inputs = [g.response for g in generations]
-        baselines = [baselines[(float(g.temp), g.id)] for g in generations]
-        first = [random.random() < 0.5 for _ in generations]
+        inputs = [g.response for g in generations if g.watermark is not None]
+        baselines = [
+            baselines[(float(g.temp), g.id)]
+            for g in generations
+            if g.watermark is not None
+        ]
+        first = [
+            random.random() < 0.5
+            for g in generations
+            if g.watermark is not None
+        ]
+        indices = [
+            g_idx
+            for g_idx, g in enumerate(generations)
+            if g.watermark is not None
+        ]
         prompts = []
         for i, task in enumerate(tasks):
             bl, assistant, local_first = baselines[i], inputs[i], first[i]
@@ -60,13 +74,14 @@ class LLMCompareRating(RatingMetric):
             prompts, SamplingParams(temperature=0, max_tokens=1024)
         )
 
-        num_regex = re.compile(r"\[\[(A|B|C)\]\]")
+        num_regex = re.compile(r"\[\[[ABC]\]\]")
+        new_generations = []
 
         # Parse outputs
         for idx, gen in enumerate(outputs):
             local_first = first[idx]
             raw = 0.5
-            matches = re.findall(num_regex, gen.response)
+            matches = re.findall(num_regex, gen.outputs[0].text.strip())
             if matches and len(matches):
                 if (
                     matches[0] == "[[A]]"
@@ -93,10 +108,16 @@ class LLMCompareRating(RatingMetric):
                 )
                 break
 
-            generations[idx] = replace(generations[idx], rating=raw)
+            new_generations.append(
+                replace(generations[indices[idx]], rating=raw)
+            )
+
+        for i, g in enumerate(generations):
+            if g.watermark is None:
+                new_generations.append(replace(g, rating=0.5))
 
         # Write to file
-        writer_queue.put(generations)
+        writer_queue.put(new_generations)
 
 
 compare_prompt = """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
@@ -108,9 +129,12 @@ and level of detail of their responses. Also account for typographical correctne
 Begin your evaluation by comparing the two responses and provide a short explanation. Avoid any position biases and ensure that the
 order in which the responses were presented does not influence your decision. Do not allow
 the length of the responses to influence your evaluation. Do not favor certain names of
-the assistants. Be as objective as possible. After providing your explanation, output your
-final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]"
-if assistant B is better, and "[[C]]" for a tie.
+the assistants. Be as objective as possible. After providing your explanation, you must 
+output your final verdict by strictly following this format: 
+* "[[A]]" if assistant A is better, 
+* "[[B]]" if assistant B is better, and 
+* "[[C]]" for a tie. 
+For example, "Verdict: [[C]]".
 
 Prompt: 
 {} <|eot_id|> <|start_header_id|>user<|end_header_id|> 
