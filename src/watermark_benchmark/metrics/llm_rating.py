@@ -73,7 +73,6 @@ class LLMRating(RatingMetric):
         # Setup server
         config.model = "meta-llama/Meta-Llama-3-8B-Instruct"
         config.max_new_tokens = 4
-        config.dtype = "bfloat16"
         config.num_return_sequences = 1
         inference_engine = config.engine
 

@@ -528,7 +528,7 @@ class ConfigSpec:
     load_from_save: bool = False
 
     gpu_memory_utilization: Optional[float] = None
-    dtype: Optional[str] = None
+    dtype: Optional[str] = "bfloat16"
     trust_remote_code: Optional[bool] = None
     logprobs: bool = False
 
