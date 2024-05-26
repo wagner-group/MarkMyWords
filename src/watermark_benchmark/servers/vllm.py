@@ -52,7 +52,7 @@ class VLLMServer(Server, LogitProcessor):
                 model, tensor_parallel_size=torch.cuda.device_count(), **kwargs
             )
         else:
-            self.server = LLM(model, enforce_eager=True, **kwargs)
+            self.server = LLM(model, **kwargs)
 
         self.devices = [i for i in range(torch.cuda.device_count())]
         self.watermark_engine = None
@@ -80,14 +80,19 @@ class VLLMServer(Server, LogitProcessor):
         """
         Deactivates the logit processor.
         """
-        if not self.ray:
-            for worker in self.server.llm_engine.workers:
-                worker.model.sampler.processor = DefaultLogitProcessor()
-        else:
-            self.server.llm_engine._run_workers(
+        if isinstance(self.server.llm_engine.model_executor, GPUExecutor):
+            self.server.llm_engine.model_executor.driver_worker.model_runner.model.sampler.processor = (
+                DefaultLogitProcessor()
+            )
+        elif isinstance(self.server.llm_engine.model_executor, RayGPUExecutor):
+            self.server.llm_engine.model_executor._run_workers(
                 "update_logit_processor",
                 get_all_outputs=True,
                 processor=DefaultLogitProcessor(),
+            )
+        else:
+            raise NotImplementedError(
+                "We only currently support GPU and Ray backends for vLLM."
             )
 
     def install(self, watermark_engine) -> None:

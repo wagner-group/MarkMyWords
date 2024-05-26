@@ -113,8 +113,6 @@ class PPLRating(RatingMetric):
                     task = tokenizer.decode(encoded_task[:max_token_length])
             tasks[i] = task
 
-        print("Encoding done. Ready for rating.")
-
         # Run model
         outputs = server.run(
             tasks,

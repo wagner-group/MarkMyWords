@@ -56,13 +56,6 @@ class LLMRating(RatingMetric):
         # Imports
         import torch
 
-        # if torch.cuda.is_available():
-        #     print("CUDA is available. Listing visible devices:")
-        #     num_devices = torch.cuda.device_count()
-        #     for i in range(num_devices):
-        #         print(f"Device {i}: {torch.cuda.get_device_name(i)}")
-        # else:
-        #     print("CUDA is not available.")
         from watermark_benchmark.servers import get_model
         from watermark_benchmark.utils import get_server_args, setup_randomness
 
@@ -76,7 +69,12 @@ class LLMRating(RatingMetric):
         config.num_return_sequences = 1
         inference_engine = config.engine
 
-        server = get_model(inference_engine, config, **get_server_args(config))
+        server = get_model(
+            inference_engine,
+            config,
+            max_model_len=4096,
+            **get_server_args(config)
+        )
 
         tokenizer = server.tokenizer()
 
@@ -108,8 +106,6 @@ class LLMRating(RatingMetric):
                     task = tokenizer.decode(encoded_task[:max_token_length])
             tasks[i] = task
 
-        print("Encoding done. Ready for rating.")
-
         # Run model
         outputs = server.run(tasks, config, 0.0, use_tqdm=True)
 
@@ -128,8 +124,7 @@ class LLMRating(RatingMetric):
                         )
                     else:
                         raw = float(val) / 100
-                else:
-                    print(gen.response)
+
                 raw = max(min(raw, 1), 0)
             except Exception as e:
                 generations[idx] = replace(generations[idx], rating=-1)

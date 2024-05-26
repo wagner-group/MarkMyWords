@@ -1,3 +1,6 @@
+import importlib.resources as pkg_resources
+import json
+
 report_system_prompt = (
     "You are a helpful assistant. Always answer in the most accurate way."
 )
@@ -172,3 +175,43 @@ raw_prompts = [
     ]
     for topic in topics
 ]
+
+### Low entropy prompts (not code)
+
+
+with pkg_resources.open_text("watermark_benchmark", "low_entropy_tasks.json") as json_file:
+    raw_low_entropy_data = json.load(json_file)
+
+paraphrase_system_prompt = "You are a helpful assistant. Always respond with a paraphrase of the input text."
+translation_system_prompt = "You are a helpful assistant. Always respond with a French translation of the input text."
+
+paraphrase_prompt = (
+    "Paraphrase the following text:\n[[START OF TEXT]]\n{}\n[[END OF TEXT]]"
+)
+translation_prompt = "Translate the following text to French:\n[[START OF TEXT]]\n{}\n[[END OF TEXT]]"
+
+raw_low_entropy_prompts = [
+    (paraphrase_prompt.format(prompt), paraphrase_system_prompt)
+    for prompt in raw_low_entropy_data
+] + [
+    (translation_prompt.format(prompt), translation_system_prompt)
+    for prompt in raw_low_entropy_data
+]
+
+
+code_prompt_prefix = """Your task is to answer coding questions. Please start by explaining your reasoning, then output the solution python code. Make sure your python code is correct, and that it will correctly parse the input from standard input to produce the desired output. Use the following format, making sure of ONLY returning code after the [[SOLUTION]] tag:
+
+[[REASONING]]
+Your reasoning goes here...
+[[SOLUTION]]
+```
+Your python solution goes here. Do not return anything but code in this section. 
+```
+[[END]]"""
+
+code_system_prompt = "You are a helpful assistant. Always respond with a correct python code and follow instructions as closely as you can."
+
+code_prompt_suffix = """
+-----Guidelines-----
+
+You are expected to produce a python program to solve this question. You must return a single block of python code that solves this problem, is correct, and will correctly pass tests."""

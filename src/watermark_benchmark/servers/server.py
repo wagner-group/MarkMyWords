@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from transformers import AutoTokenizer
+
 from watermark_benchmark.utils.classes import Generation, WatermarkSpec
 
 
@@ -36,3 +38,7 @@ class Server(ABC):
 
     def devices(self):
         return self.devices
+
+    @staticmethod
+    def get_tokenizer(model):
+        return AutoTokenizer.from_pretrained(model)

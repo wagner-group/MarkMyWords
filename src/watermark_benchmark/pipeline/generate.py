@@ -13,10 +13,12 @@ from watermark_benchmark.utils import (
     load_config,
     setup_randomness,
 )
-from watermark_benchmark.utils.generation_prompts import raw_prompts
+from watermark_benchmark.utils.generation_prompts import (
+    raw_prompts as default_prompts,
+)
 
 
-def writer_process(queue, config, w_count):
+def writer_process(queue, config, w_count, use_tqdm=True):
     """
     This function is a process that writes the generated outputs to a file.
 
@@ -28,7 +30,9 @@ def writer_process(queue, config, w_count):
 
     outfilepath = get_output_file(config)
 
-    for _ in tqdm(range(w_count), total=w_count, desc="Generations"):
+    for _ in tqdm(
+        range(w_count), total=w_count, desc="Generations", disable=not use_tqdm
+    ):
         task = queue.get(block=True)
         if task is None:
             queue.put(None)
@@ -39,7 +43,13 @@ def writer_process(queue, config, w_count):
 
 
 def gen_process(
-    config, tasks, writer_queue, device, prompts, custom_builder=None
+    config,
+    tasks,
+    writer_queue,
+    device,
+    prompts,
+    custom_builder=None,
+    use_tqdm=False,
 ):
     """
     This function is a process that generates watermarked text.
@@ -56,6 +66,8 @@ def gen_process(
     # Imports
     import torch
 
+    torch.set_num_threads(1)
+
     from watermark_benchmark.servers import get_model
     from watermark_benchmark.utils.bit_tokenizer import Binarization
     from watermark_benchmark.watermark import get_watermark
@@ -63,7 +75,9 @@ def gen_process(
     setup_randomness(config)
 
     # Setup server
-    server = get_model(config.engine, config, **get_server_args(config))
+    server = get_model(
+        config.engine, config, max_model_len=2048, **get_server_args(config)
+    )
     tokenizer = server.tokenizer()
     binarizer = Binarization(
         tokenizer,
@@ -90,7 +104,9 @@ def gen_process(
 
         # Install and run
         server.install(watermark_engine)
-        outputs = server.run(prompts, config, temp, keys, watermark)
+        outputs = server.run(
+            prompts, config, temp, keys, watermark, use_tqdm=use_tqdm
+        )
 
         writer_queue.put(outputs)
 
@@ -102,7 +118,13 @@ def gen_process(
         run_instance(*t)
 
 
-def run(config_file, watermarks=None, custom_builder=None):
+def run(
+    config_file,
+    watermarks=None,
+    custom_builder=None,
+    raw_prompts=default_prompts,
+    use_tqdm=False,
+):
     """
     This function runs the watermark generation process.
 
@@ -180,27 +202,46 @@ def run(config_file, watermarks=None, custom_builder=None):
     writer_queue = global_manager.Queue()
     random.shuffle(filtered_tasks)
 
-    for idx, device in enumerate(config.get_devices()):
-        local = filtered_tasks[idx * ct : (idx + 1) * ct]
-        processes.append(
-            multiprocessing.Process(
-                target=gen_process,
-                args=(
-                    config,
-                    local,
-                    writer_queue,
-                    device,
-                    prompts,
-                    custom_builder,
-                ),
+    if len(config.get_devices()) > 1:
+        for idx, device in enumerate(config.get_devices()):
+            local = filtered_tasks[idx * ct : (idx + 1) * ct]
+            processes.append(
+                multiprocessing.Process(
+                    target=gen_process,
+                    args=(
+                        config,
+                        local,
+                        writer_queue,
+                        device,
+                        prompts,
+                        custom_builder,
+                        use_tqdm,
+                    ),
+                )
             )
-        )
-        processes[-1].start()
+            processes[-1].start()
 
-    writer = multiprocessing.Process(
-        target=writer_process, args=(writer_queue, config, len(filtered_tasks))
-    )
-    writer.start()
+        writer = multiprocessing.Process(
+            target=writer_process,
+            args=(writer_queue, config, len(filtered_tasks)),
+        )
+        writer.start()
+    else:
+        writer = multiprocessing.Process(
+            target=writer_process,
+            args=(writer_queue, config, len(filtered_tasks), False),
+        )
+        writer.start()
+        device = config.get_devices()[0]
+        gen_process(
+            config,
+            filtered_tasks,
+            writer_queue,
+            device,
+            prompts,
+            custom_builder,
+            True,
+        )
 
     # Setup signal handler
     def graceful_exit(sig, frame):

@@ -4,3 +4,6 @@
 [submodule "submodules/cpp-hash"]
 	path = submodules/cpp-hash
 	url = git@github.com:julien-piet/cpp-hash.git
+[submodule "submodules/apps"]
+	path = submodules/apps
+	url = git@github.com:julien-piet/apps.git

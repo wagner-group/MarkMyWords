@@ -31,8 +31,6 @@ class ExponentialGenerator(Watermark):
         self.skip_prob = skip_prob
 
     def _process(self, logits, previous_tokens, ids):
-        # print("Previous tokens: {}".format([p[-1] for p in previous_tokens]))
-        # print(id(self))
 
         # Truncate unused logits. Return as is with skip probability
         local_logits = logits[:, : self.rng.vocab_size] / self.temp
@@ -51,12 +49,8 @@ class ExponentialGenerator(Watermark):
         # Get next token, and update logit
         next_token = hash_values.argmin(dim=-1)
 
-        # print("Next token choice: {} | {} (P = {})".format(next_token.cpu(), hash_values.min(dim=-1).cpu(), probs[next_token.to(probs.device)].cpu()))
-
         local_logits[:] = -math.inf
         local_logits[torch.arange(local_logits.shape[0]), next_token] = 0
-
-        # print("Next tokens: {}".format(next_token))
 
         return local_logits
 

@@ -12,7 +12,7 @@ from dataclasses import replace
 from openai import OpenAI
 from tqdm import tqdm
 
-from ..pipeline.quality import prompt as rating_prompt
+from ..metrics.llm_rating import prompt_no_cot as rating_prompt
 from . import (
     get_input_file,
     get_output_file,
@@ -20,6 +20,16 @@ from . import (
     setup_randomness,
 )
 from .classes import Generation
+
+rating_prompt = (
+    rating_prompt.replace(
+        "<|begin_of_text|><|start_header_id|>system<|end_header_id|> ", ""
+    )
+    .replace("<|start_header_id|>user<|end_header_id|> ", "\n")
+    .replace(
+        "<|eot_id|> <|start_header_id|>assistant<|end_header_id|> ", "\n\n"
+    )
+)
 
 rating_prompt = (
     rating_prompt.replace("[INST]", "")
@@ -364,9 +374,11 @@ def run(config_file, model="gpt-3.5-turbo"):
     existing = {
         str(
             (
-                g.watermark.to_dict(True, True)
-                if g.watermark is not None
-                else g.temp,
+                (
+                    g.watermark.to_dict(True, True)
+                    if g.watermark is not None
+                    else g.temp
+                ),
                 g.id,
                 g.attack,
             )
@@ -378,9 +390,11 @@ def run(config_file, model="gpt-3.5-turbo"):
         for g in generations
         if str(
             (
-                g.watermark.to_dict(True, True)
-                if g.watermark is not None
-                else g.temp,
+                (
+                    g.watermark.to_dict(True, True)
+                    if g.watermark is not None
+                    else g.temp
+                ),
                 g.id,
                 g.attack,
             )

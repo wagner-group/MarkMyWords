@@ -13,6 +13,7 @@ from watermark_benchmark.utils import (
 )
 from watermark_benchmark.utils.classes import Generation
 
+from ..metrics.code import CodeRating
 from ..metrics.llm_compare import LLMCompareRating
 from ..metrics.llm_rating import LLMRating
 from ..metrics.MAUVE import MAUVERating
@@ -49,6 +50,8 @@ def rating_process(config, generations, writer_queue, device, baselines):
         metric = RepetitionRating(config, writer_queue, device)
     elif config.quality_metric == "llm_compare":
         metric = LLMCompareRating(config, writer_queue, device)
+    elif config.quality_metric == "code":
+        metric = CodeRating(config, writer_queue, device)
     else:
         raise ValueError(
             "Unknown quality metric: {}. Valid metrics are [llm, mauve, ppl, repetition]".format(
@@ -71,7 +74,7 @@ def run(config_file, generations=None):
     # load generations
     generations = (
         Generation.from_file(get_input_file(config))
-        if not generations
+        if generations is None
         else generations
     )
     outfilepath = get_output_file(config)
@@ -109,7 +112,6 @@ def run(config_file, generations=None):
     if not len(settings):
         return
 
-    print(f"Rating {len(settings)} benchmark generations suites...")
     baselines = {
         (float(g.temp), g.id): g.response
         for g in generations

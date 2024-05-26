@@ -1,6 +1,8 @@
 import io
 import logging
 import os
+import random
+import time
 from contextlib import redirect_stdout
 from dataclasses import replace
 
@@ -95,6 +97,12 @@ class MAUVERating(RatingMetric):
 
             q_tokens = np.array([v.outputs.embedding for v in vllm_outputs])
 
+            seed = (
+                config.seed
+                if config.seed is not None
+                else int(time.time() * 1000)
+            ) % 100000
+
             # Redirect stderr at the file descriptor level
             stderr_fd = 2  # Standard error file descriptor is 2
             devnull_fd = os.open(os.devnull, os.O_RDWR)  # Open os.devnull
@@ -107,7 +115,7 @@ class MAUVERating(RatingMetric):
                         p_features=p_tokens,
                         q_features=q_tokens,
                         device_id=0,
-                        seed=config.seed,
+                        seed=seed,
                         verbose=False,
                     ).mauve
             finally:

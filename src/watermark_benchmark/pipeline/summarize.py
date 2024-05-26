@@ -204,9 +204,11 @@ def run(config_file, generations=None):
                     for v in (
                         summary[k].quality,
                         summary[k].efficiency,
-                        summary[k].robustness.hull.volume
-                        if summary[k].robustness
-                        else 0,
+                        (
+                            summary[k].robustness.hull.volume
+                            if summary[k].robustness
+                            else 0
+                        ),
                     )
                 ]
             )
@@ -244,7 +246,7 @@ def run(config_file, generations=None):
                     threshold_points.add(key)
                     outfile.write(
                         "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-                            axis, key, *thsd, val[0], *val[1]
+                            axis, key, *thsd, val[0] if val[0] else "-", *val[1]
                         )
                     )
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import dacite
+from apps.classes import ConfigCode
 
 
 def str_or_none(val):
@@ -533,6 +534,8 @@ class ConfigSpec:
     logprobs: bool = False
 
     openai_parallelism: Optional[int] = 32
+
+    code_config: ConfigCode = ConfigCode()
 
     def get_devices(self):
         import torch

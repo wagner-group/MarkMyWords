@@ -45,6 +45,17 @@ def init_attacks(
 
     attack_list = {}
 
+    if config.paraphrase:
+        for name, params in ParaphraseAttack.get_param_list(reduced=False):
+            attack_list[name] = (
+                ParaphraseAttack(
+                    *params, queue=dispatch_queue, resp_queue=results_queue
+                )
+                if not names_only
+                else True
+            )
+        return attack_list
+
     # Helm attacks
     attack_list.update(init_helm_attacks(names_only=names_only))
 
