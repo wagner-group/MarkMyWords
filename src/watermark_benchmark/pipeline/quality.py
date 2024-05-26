@@ -124,6 +124,12 @@ def run(config_file, generations=None):
     processes = []
     writer_queue = global_manager.Queue()
 
+    writer = multiprocessing.Process(
+        target=writer_process,
+        args=(writer_queue, config, len(config.get_devices())),
+    )
+    writer.start()
+
     for idx, device in enumerate(devices):
         local_settings = set(settings[idx * ct : (idx + 1) * ct])
         local_tasks = [
@@ -139,19 +145,16 @@ def run(config_file, generations=None):
             )
             in local_settings
         ]
-        processes.append(
-            multiprocessing.Process(
-                target=rating_process,
-                args=(config, local_tasks, writer_queue, device, baselines),
+        if len(devices) > 1:
+            processes.append(
+                multiprocessing.Process(
+                    target=rating_process,
+                    args=(config, local_tasks, writer_queue, device, baselines),
+                )
             )
-        )
-        processes[-1].start()
-
-    writer = multiprocessing.Process(
-        target=writer_process,
-        args=(writer_queue, config, len(config.get_devices())),
-    )
-    writer.start()
+            processes[-1].start()
+        else:
+            rating_process(config, local_tasks, writer_queue, device, baselines)
 
     # Setup signal handler
     def graceful_exit(sig, frame):

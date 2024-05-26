@@ -70,8 +70,9 @@ class MAUVERating(RatingMetric):
         for i, (k, _) in enumerate(baseline_generations):
             baseline_encodings[k] = vllm_outputs[i].outputs.embedding
 
+        new_generations = []
         for key, tasks in tqdm(
-            specs.items(),
+            list(specs.items()),
             desc="Computing MAUVE scores",
             total=len(specs),
         ):
@@ -90,8 +91,6 @@ class MAUVERating(RatingMetric):
                 )
             except Exception as e:
                 print(f"Error in encoding: {e}")
-                for i in original_ids:
-                    generations[i] = replace(generations[i], rating=-1)
                 continue
 
             q_tokens = np.array([v.outputs.embedding for v in vllm_outputs])
@@ -119,11 +118,13 @@ class MAUVERating(RatingMetric):
                 os.close(devnull_fd)  # Close the devnull fd
 
             for i in original_ids:
-                generations[i] = replace(generations[i], rating=mauve_score)
+                new_generations.append(
+                    replace(generations[i], rating=mauve_score)
+                )
 
         for i, g in enumerate(generations):
             if g.watermark is None:
-                generations[i] = replace(g, rating=1)
+                new_generations.append(replace(g, rating=1))
 
         # Write to file
         writer_queue.put(generations)
