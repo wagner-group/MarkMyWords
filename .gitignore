@@ -1,3 +1,5 @@
+encodings/*
+pecc/*
 env/*
 dist/*
 build/*

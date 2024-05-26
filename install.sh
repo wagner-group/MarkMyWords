@@ -22,7 +22,7 @@ pip install submodules/vllm || exit 1
 
 
 # Install specific versions of packages for VLLM compatibility
-pip install lingua-language-detector tiktoken transformers scikit-learn nltk pyinflect accelerate openai textattack pandas dacite dahuffman argostranslate dill
+pip install lingua-language-detector tiktoken transformers scikit-learn nltk pyinflect accelerate openai textattack pandas dacite dahuffman argostranslate dill mauve-text
 
 #pip install starlette==0.27.0
 

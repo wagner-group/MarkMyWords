@@ -13,6 +13,7 @@ from watermark_benchmark.utils import (
 )
 from watermark_benchmark.utils.classes import Generation
 
+from ..metrics.llm_compare import LLMCompareRating
 from ..metrics.llm_rating import LLMRating
 from ..metrics.MAUVE import MAUVERating
 from ..metrics.ppl import PPLRating
@@ -38,12 +39,16 @@ def writer_process(queue, config, w_count):
 def rating_process(config, generations, writer_queue, device, baselines):
     if config.quality_metric == "llm":
         metric = LLMRating(config, writer_queue, device)
+    elif config.quality_metric == "llm_cot":
+        metric = LLMRating(config, writer_queue, device, cot=True)
     elif config.quality_metric == "mauve":
         metric = MAUVERating(config, writer_queue, device)
     elif config.quality_metric == "ppl":
         metric = PPLRating(config, writer_queue, device)
     elif config.quality_metric == "repetition":
         metric = RepetitionRating(config, writer_queue, device)
+    elif config.quality_metric == "llm_compare":
+        metric = LLMCompareRating(config, writer_queue, device)
     else:
         raise ValueError(
             "Unknown quality metric: {}. Valid metrics are [llm, mauve, ppl, repetition]".format(
@@ -73,33 +78,28 @@ def run(config_file, generations=None):
     if not os.path.exists(outfilepath):
         Generation.to_file(outfilepath)
     existing = {
-        str(
+        (
             (
-                (
-                    g.watermark.to_dict(True, True)
-                    if g.watermark is not None
-                    else g.temp
-                ),
-                g.id,
-                g.attack,
-            )
+                str(g.watermark.to_dict(True, True))
+                if g.watermark is not None
+                else g.temp
+            ),
+            g.attack,
         )
         for g in Generation.from_file(outfilepath)
+        if g.rating != -1
     }
 
     settings = [
         v
         for v in set(
-            str(
+            (
                 (
-                    (
-                        g.watermark.to_dict(True, True)
-                        if g.watermark is not None
-                        else g.temp
-                    ),
-                    g.id,
-                    g.attack,
-                )
+                    str(g.watermark.to_dict(True, True))
+                    if g.watermark is not None
+                    else g.temp
+                ),
+                g.attack,
             )
             for g in generations
         )
@@ -109,31 +109,33 @@ def run(config_file, generations=None):
     if not len(settings):
         return
 
-    baselines = {(str(g.temp), str(g.id)): g.response for g in generations}
-    ct = 1 + (len(settings) // 4 * len(config.get_devices()))
-    global_manager = multiprocessing.Manager()
-    processes = []
-    writer_queue = global_manager.Queue()
+    print(f"Rating {len(settings)} benchmark generations suites...")
+    baselines = {
+        (float(g.temp), g.id): g.response
+        for g in generations
+        if g.watermark is None and g.attack is None
+    }
 
     devices = []
     for device in config.get_devices():
-        devices.extend(4 * [device])
+        devices.extend([device])
+    ct = 1 + (len(settings) // len(devices))
+    global_manager = multiprocessing.Manager()
+    processes = []
+    writer_queue = global_manager.Queue()
 
     for idx, device in enumerate(devices):
         local_settings = set(settings[idx * ct : (idx + 1) * ct])
         local_tasks = [
             g
             for g in generations
-            if str(
+            if (
                 (
-                    (
-                        g.watermark.to_dict(True, True)
-                        if g.watermark is not None
-                        else g.temp
-                    ),
-                    g.id,
-                    g.attack,
-                )
+                    str(g.watermark.to_dict(True, True))
+                    if g.watermark is not None
+                    else g.temp
+                ),
+                g.attack,
             )
             in local_settings
         ]

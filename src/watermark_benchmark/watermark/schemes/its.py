@@ -89,7 +89,6 @@ class InverseTransformVerifier(Verifier):
         if not len(tokens):
             return [(False, 0.5, 0.5, 0, 0)]
 
->>>>>>> 6a629c1... Added support for model-dependent watermarks
         if type(self.rng) == ExternalRandomness:
             xi = self.rng.xi[index].to(self.rng.device)[:, 0]
         else:

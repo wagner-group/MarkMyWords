@@ -145,9 +145,9 @@ class Generation:
     entropy: Optional[float] = None
     spike_entropy: Optional[float] = None
     temp: Optional[float] = None
-    prompt_logprobs: Optional[List[Tuple[int, float]]] = None
 
     # Non printed fields
+    prompt_logprobs: Optional[List[Tuple[int, float]]] = None
     logprobs: Optional[List[float]] = field(default_factory=list, hash=False)
     original_tokens: Optional[List[int]] = field(
         default_factory=list, hash=False

@@ -10,6 +10,8 @@ from vllm import (
     SamplingMetadata,
     SamplingParams,
 )
+from vllm.executor.gpu_executor import GPUExecutor
+from vllm.executor.ray_gpu_executor import RayGPUExecutor
 
 from watermark_benchmark.utils.classes import (
     ConfigSpec,
@@ -50,7 +52,7 @@ class VLLMServer(Server, LogitProcessor):
                 model, tensor_parallel_size=torch.cuda.device_count(), **kwargs
             )
         else:
-            self.server = LLM(model, **kwargs)
+            self.server = LLM(model, enforce_eager=True, **kwargs)
 
         self.devices = [i for i in range(torch.cuda.device_count())]
         self.watermark_engine = None
@@ -61,12 +63,17 @@ class VLLMServer(Server, LogitProcessor):
         """
         Activates the logit processor.
         """
-        if not self.ray:
-            for worker in self.server.llm_engine.workers:
-                worker.model_runner.model.sampler.processor = self
-        else:
-            self.server.llm_engine._run_workers(
+        if isinstance(self.server.llm_engine.model_executor, GPUExecutor):
+            self.server.llm_engine.model_executor.driver_worker.model_runner.model.sampler.processor = (
+                self
+            )
+        elif isinstance(self.server.llm_engine.model_executor, RayGPUExecutor):
+            self.server.llm_engine.model_executor._run_workers(
                 "update_logit_processor", get_all_outputs=True, processor=self
+            )
+        else:
+            raise NotImplementedError(
+                "We only currently support GPU and Ray backends for vLLM."
             )
 
     def _deactivate_processor(self) -> None:
@@ -106,14 +113,14 @@ class VLLMServer(Server, LogitProcessor):
         - torch.Tensor: The processed logits.
         """
         prev_token_ids = [
-            sampling_metadata.seq_data[seq_id].get_token_ids()
+            seq_group.seq_data[seq_id].get_token_ids()
             for seq_group in sampling_metadata.seq_groups
-            for seq_id in seq_group[0]
+            for seq_id in seq_group.seq_ids
         ]
         ids = [
             seq_id - self.max_idx
             for seq_group in sampling_metadata.seq_groups
-            for seq_id in seq_group[0]
+            for seq_id in seq_group.seq_ids
         ]
 
         logits_copy = logits.clone()
@@ -124,10 +131,16 @@ class VLLMServer(Server, LogitProcessor):
         if logits_copy.shape[0] != len(ids):
             prompt_embeddings = {
                 id: v.prompt_token_ids[1:]
-                for id, v in sampling_metadata.seq_data.items()
+                for seq_group in sampling_metadata.seq_groups
+                for id, v in seq_group.seq_data.items()
                 if v.prompt_token_ids is not None
             }
-            self.stats.update(logits_copy, ids, logits.argmax(dim=-1), prompt_embeddings=prompt_embeddings)
+            self.stats.update(
+                logits_copy,
+                ids,
+                logits.argmax(dim=-1),
+                prompt_embeddings=prompt_embeddings,
+            )
         else:
             self.stats.update(logits_copy, ids, logits.argmax(dim=-1))
 
@@ -198,9 +211,11 @@ class VLLMServer(Server, LogitProcessor):
                     if output.prompt_logprobs is not None
                     else None
                 ),
-                self.stats.logprobs[int(output.request_id) - self.max_idx]
-                if config.logprobs
-                else None,
+                (
+                    self.stats.logprobs[int(output.request_id) - self.max_idx]
+                    if config.logprobs
+                    else None
+                ),
                 original_tokens=output.outputs[0].token_ids,
             )
             for i, output in enumerate(outputs)
@@ -212,4 +227,4 @@ class VLLMServer(Server, LogitProcessor):
         """
         Returns the tokenizer.
         """
-        return self.server.llm_engine.tokenizer
+        return self.server.get_tokenizer()
