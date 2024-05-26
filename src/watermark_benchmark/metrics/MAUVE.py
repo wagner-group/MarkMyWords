@@ -127,4 +127,4 @@ class MAUVERating(RatingMetric):
                 new_generations.append(replace(g, rating=1))
 
         # Write to file
-        writer_queue.put(generations)
+        writer_queue.put(new_generations)
