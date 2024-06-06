@@ -458,7 +458,7 @@ class ExternalRandomness(Randomness):
                 [r.random() for _ in range(self.key_len * self.random_size)]
                 for r in self.rng
             ],
-            dtype=torch.float32,
+            dtype=torch.float64,
         ).reshape(len(self.rng), self.key_len, self.random_size)
 
     def reinit(self):

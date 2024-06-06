@@ -78,7 +78,7 @@ class Watermark(ABC):
         self.rng.reset()
 
     def verify(
-        self, tokens, skip_edit=False, **kwargs
+        self, tokens, skip_edit=False, meta=None, **kwargs
     ) -> Dict[Tuple[float, str, str], VerifierOutput]:
         """
         Verifies the watermark in the given tokens.
@@ -94,14 +94,12 @@ class Watermark(ABC):
         """
         rtn = {}
         for v in self.verifiers:
-            if "method" in v.__dict__ and v.method != "regular" and skip_edit:
-                continue
             if "method" in v.__dict__ and v.method != "regular":
                 kwargs["exact"] = False
-            rtn[v.id()] = v.verify(tokens, **kwargs)
+            rtn[v.id()] = v.verify(tokens, meta=meta, **kwargs)
         return rtn
 
-    def verify_text(self, text, skip_edit=False, **kwargs):
+    def verify_text(self, text, skip_edit=False, meta=None, **kwargs):
         """
         Verifies the watermark in the given text.
 
@@ -117,4 +115,4 @@ class Watermark(ABC):
         tokens = self.tokenizer.encode(
             text, add_special_tokens=False, return_tensors="pt"
         ).to(self.rng.device)
-        return self.verify(tokens, skip_edit=skip_edit, **kwargs)
+        return self.verify(tokens, skip_edit=skip_edit, meta=meta, **kwargs)

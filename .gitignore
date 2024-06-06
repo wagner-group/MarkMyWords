@@ -1,7 +1,10 @@
+encodings/*
+pecc/*
 env/*
 dist/*
 build/*
 example/*
+notebooks/*
 *.egg-info
 __pycache__
 example/rslt*
@@ -17,4 +20,5 @@ run/old/*
 run/.saved_tasks
 run/parallel.yml
 run/static_data/encodings/*
+run/static_data/selected/*
 src/watermark_benchmark/perplexity/*

@@ -63,40 +63,11 @@ def run(
         )
         gen_wrapper(config, watermarks, custom_builder)
 
-    print("### PERTURBING ###")
-
-    # Perturb
-    if PERTURB:
-        config.input_file = config.results + "/generations{}.tsv".format(
-            "_val" if config.validation else ""
-        )
-        config.output_file = config.results + "/perturbed{}.tsv".format(
-            "_val" if config.validation else ""
-        )
-        if no_attack:
-            shutil.copyfile(config.input_file, config.output_file)
-        else:
-            generations = Generation.from_file(config.input_file)
-            perturb_wrapper(config, generations)
-
-    print("### RATING ###")
-
-    # Rate
-    if RATE:
-        config.input_file = config.results + "/perturbed{}.tsv".format(
-            "_val" if config.validation else ""
-        )
-        config.output_file = config.results + "/rated{}.tsv".format(
-            "_val" if config.validation else ""
-        )
-        generations = Generation.from_file(config.input_file)
-        rate_wrapper(config, generations)
-
     print("### DETECTING ###")
 
     # Detect
     if DETECT:
-        config.input_file = config.results + "/rated{}.tsv".format(
+        config.input_file = config.results + "/generations{}.tsv".format(
             "_val" if config.validation else ""
         )
         config.output_file = config.results + "/detect{}.tsv".format(
@@ -117,15 +88,22 @@ def run(
 def main():
     multiprocessing.set_start_method("spawn")
     config = load_config(sys.argv[1])
+    iteration_count = int(sys.argv[2]) if len(sys.argv) > 2 else 10
     with open(config.watermark, encoding="utf-8") as infile:
         watermarks = [
             replace(WatermarkSpec.from_str(l.strip()), tokenizer=config.model)
             for l in infile.read().split("\n")
             if len(l)
         ]
-    generations = run(config, watermarks)
 
-    summary_run(config, generations)
+    orignal_results_path = config.results
+    for iteration in range(iteration_count):
+        config.results = os.path.join(
+            orignal_results_path, f"iteration_{iteration}"
+        )
+        os.makedirs(config.results, exist_ok=True)
+        config.seed = iteration
+        run(config, watermarks)
 
 
 def full_pipeline(

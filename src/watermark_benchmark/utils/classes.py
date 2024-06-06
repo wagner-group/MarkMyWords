@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import dacite
+from apps.classes import ConfigCode
 
 
 def str_or_none(val):
@@ -146,6 +147,13 @@ class Generation:
     spike_entropy: Optional[float] = None
     temp: Optional[float] = None
 
+    # Non printed fields
+    prompt_logprobs: Optional[List[Tuple[int, float]]] = None
+    logprobs: Optional[List[float]] = field(default_factory=list, hash=False)
+    original_tokens: Optional[List[int]] = field(
+        default_factory=list, hash=False
+    )
+
     @staticmethod
     def keys() -> List[str]:
         return [
@@ -218,7 +226,16 @@ class Generation:
                 ]
                 and val is not None
             ):
-                val = float(val)
+                try:
+                    val = float(val)
+                except ValueError:
+                    val = tuple(
+                        float(v.strip())
+                        for v in val.replace(")", "")
+                        .replace("(", "")
+                        .split(",")
+                        if len(v)
+                    )
             elif (key == "response" or key == "prompt") and val is not None:
                 val = (
                     re.sub(r"(___LINE___)+$", "___LINE___", val)
@@ -332,7 +349,11 @@ class BenchmarkResults:
                         str(i)
                         for i in [w]
                         + [v.__dict__[k] for k in base_keys]
-                        + v.robustness.to_list()
+                        + (
+                            v.robustness.to_list()
+                            if v.robustness is not None
+                            else []
+                        )
                     ]
                 )
                 for w, v in s.items()
@@ -487,6 +508,8 @@ class ConfigSpec:
     devices: Optional[List[int]] = None
     detections_per_gpu: int = 4
 
+    quality_metric: str = "llm"
+
     results: str = "results"
     threshold: float = 0.8
     hull_axis: List[Any] = field(
@@ -506,8 +529,13 @@ class ConfigSpec:
     load_from_save: bool = False
 
     gpu_memory_utilization: Optional[float] = None
-    dtype: Optional[str] = None
+    dtype: Optional[str] = "bfloat16"
     trust_remote_code: Optional[bool] = None
+    logprobs: bool = False
+
+    openai_parallelism: Optional[int] = 32
+
+    code_config: ConfigCode = ConfigCode()
 
     def get_devices(self):
         import torch

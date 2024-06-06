@@ -114,9 +114,6 @@ def prepare_for_hull(d, bounds, baselines, direction=None, add_points=True):
         )
         keys += ["E1", "E2", "E3", "E4", "E5", "E6"]
 
-    # print(keys[0][:2])
-    # print(values)
-
     return values, keys
 
 
@@ -303,16 +300,14 @@ def find_convex_hull(data, baselines, max_seq_len, ignore_robustness=False):
         )
         rtn[(model, temp)] = convex_hull(
             points,
-            [1, max_seq_len, 0.5]
-            if not ignore_robustness
-            else [1, max_seq_len],
+            (
+                [1, max_seq_len, 0.5]
+                if not ignore_robustness
+                else [1, max_seq_len]
+            ),
             local_baselines,
             direction=[1, -1, 1] if not ignore_robustness else [1, -1],
         )
-
-        if "distribution" in model and float(temp) == 0.7:
-            # breakpoint()
-            pass
 
     return rtn
 
@@ -346,9 +341,11 @@ def convex_hull_validation(
         hull = hull_volume(
             hull,
             all_points,
-            [1, max_seq_len, 0.5]
-            if not ignore_robustness
-            else [1, max_seq_len],
+            (
+                [1, max_seq_len, 0.5]
+                if not ignore_robustness
+                else [1, max_seq_len]
+            ),
             local_baselines,
             direction=[1, -1, 1] if not ignore_robustness else [1, -1],
         )
@@ -365,18 +362,28 @@ def find_threshold(data, thresholds, baselines):
             q_t, r_t = q_baseline * (1 - float(thresholds[0])), r_baseline * (
                 1 - float(thresholds[1])
             )
-            best_label, best_values = min(
-                list(points.items()),
-                key=lambda x: 32000 * (x[1][0] < q_t)
-                + 32000 * (x[1][2] < r_t)
-                + x[1][1],
-            )
+            eligible = [
+                item
+                for item in points.items()
+                if item[1][0] >= q_t and item[1][2] >= r_t
+            ]
+            if not len(eligible):
+                best_label, best_values = None, (0, math.inf, 0)
+            else:
+                best_label, best_values = min(
+                    eligible,
+                    key=lambda x: x[1][1],
+                )
         else:
             q_t = q_baseline * (1 - float(thresholds[0]))
-            best_label, best_values = max(
-                list(points.items()),
-                key=lambda x: -32000 * (x[1][0] < q_t) + x[1][2],
-            )
+            eligible = [item for item in points.items() if item[1][0] >= q_t]
+            if not len(eligible):
+                best_label, best_values = None, (0, math.inf, 0)
+            else:
+                best_label, best_values = max(
+                    eligible,
+                    key=lambda x: x[1][2],
+                )
 
         rtn[(model, temp)] = (best_label, best_values)
 
@@ -390,7 +397,9 @@ def verify_threshold(data, orig):
             continue
 
         key = orig[(model, temp)][0]
-        if key in points:
+        if key is None:
+            rtn[(model, temp)] = (key, (0, math.inf, 0))
+        elif key in points:
             rtn[(model, temp)] = (key, points[key])
         else:
             print("Missing {}".format((model, temp)))

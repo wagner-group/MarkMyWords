@@ -52,6 +52,7 @@ def run(config_file, generations=None):
         }
         perturbed_list = set()
         non_watermarked = {}
+        attack_list = set()
         for g in generations:
             if not g.efficiency:
                 g = replace(g, efficiency=math.inf)
@@ -61,11 +62,14 @@ def run(config_file, generations=None):
                 non_watermarked[g.temp].append(g)
             else:
                 key = str(g.watermark)
+                attack_list.add(g.attack)
                 if g.attack not in attack_dict[key]:
                     attack_dict[key][g.attack] = []
                 attack_dict[key][g.attack].append(g)
                 if g.attack is not None:
                     perturbed_list.add((key, g.id))
+
+        attack_list = list(attack_list)
 
         # Compute all attack averages
         summary_attack = {
@@ -123,6 +127,8 @@ def run(config_file, generations=None):
             dill.dump(summary, outfile)
         with open(prefix + "/baselines.json", "w") as outfile:
             json.dump(baselines, outfile)
+        with open(prefix + "/attack_list.json", "w") as outfile:
+            json.dump(attack_list, outfile)
     else:
         with open(prefix + "/summary_attack.pkl", "rb") as infile:
             summary_attack = dill.load(infile)
@@ -130,29 +136,34 @@ def run(config_file, generations=None):
             baselines = {float(k): v for k, v in json.load(infile).items()}
         with open(prefix + "/summary.pkl", "rb") as outfile:
             summary = dill.load(outfile)
+        with open(prefix + "/attack_list.json", "r") as outfile:
+            attack_list = json.load(outfile)
 
     # Compute robustness
-    if config.validation:
-        with open(config.results + "/full/robustness_hull.pkl", "rb") as infile:
-            robustness_hull = dill.load(infile)
-        robustness_summary = summarize_robustness(
-            summary_attack,
-            threshold=config.threshold,
-            existing_hull=robustness_hull,
-        )
-    else:
-        robustness_summary = summarize_robustness(
-            summary_attack, threshold=config.threshold
-        )
+    if len(attack_list) > 1:
+        if config.validation:
+            with open(
+                config.results + "/full/robustness_hull.pkl", "rb"
+            ) as infile:
+                robustness_hull = dill.load(infile)
+            robustness_summary = summarize_robustness(
+                summary_attack,
+                threshold=config.threshold,
+                existing_hull=robustness_hull,
+            )
+        else:
+            robustness_summary = summarize_robustness(
+                summary_attack, threshold=config.threshold
+            )
 
-    with open(prefix + "/robustness_hull.pkl", "wb") as outfile:
-        dill.dump(robustness_summary, outfile)
+        with open(prefix + "/robustness_hull.pkl", "wb") as outfile:
+            dill.dump(robustness_summary, outfile)
 
-    # Summarize all metrics
-    summary = {
-        k: replace(summary[k], robustness=robustness_summary[k])
-        for k in summary
-    }
+        # Summarize all metrics
+        summary = {
+            k: replace(summary[k], robustness=robustness_summary[k])
+            for k in summary
+        }
 
     with open(prefix + "/results.tsv", "w") as outfile:
         outfile.write(BenchmarkResults.to_tsv(summary))
@@ -193,7 +204,11 @@ def run(config_file, generations=None):
                     for v in (
                         summary[k].quality,
                         summary[k].efficiency,
-                        summary[k].robustness.hull.volume,
+                        (
+                            summary[k].robustness.hull.volume
+                            if summary[k].robustness
+                            else 0
+                        ),
                     )
                 ]
             )
@@ -231,7 +246,7 @@ def run(config_file, generations=None):
                     threshold_points.add(key)
                     outfile.write(
                         "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-                            axis, key, *thsd, val[0], *val[1]
+                            axis, key, *thsd, val[0] if val[0] else "-", *val[1]
                         )
                     )
 

@@ -77,7 +77,6 @@ def detect_process(device, config, tasks, writer_queue, custom_builder=None):
         setup_randomness(config)
         _, generations = task
         watermark = generations[0].watermark
-        print(f"Working on {watermark}")
         reduced, full = [], []
         unique_keys, keys, key_indices = {}, [], []
         for g in generations:
@@ -97,7 +96,10 @@ def detect_process(device, config, tasks, writer_queue, custom_builder=None):
             )
             for g_idx, g in enumerate(generations):
                 verifier_outputs = watermark_engine.verify_text(
-                    g.response, exact=True, index=key_indices[g_idx]
+                    g.response,
+                    exact=True,
+                    index=key_indices[g_idx],
+                    meta={"prompt": g.prompt},
                 )
                 sep_watermarks = watermark.sep_verifiers()
 

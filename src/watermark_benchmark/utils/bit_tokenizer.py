@@ -167,10 +167,7 @@ class Binarization:
 
     @staticmethod
     def _get_average_length(text, tokenizer, codewords, save_path=None):
-        try:
-            codewords = torch.tensor(codewords).cuda()
-        except:
-            breakpoint()
+        codewords = torch.tensor(codewords).cuda()
         total_bits = 0
         total_tokens = 0
         for txt in tqdm(text, desc="Encoding text", total=len(text)):

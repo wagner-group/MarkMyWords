@@ -2,6 +2,7 @@
 
 import inspect
 import random
+import time
 
 import numpy as np
 import torch
@@ -20,10 +21,13 @@ def load_config(config_file):
 
 def setup_randomness(config):
     # Setup randomness
-    if config.seed is not None:
-        torch.manual_seed(config.seed)
-        random.seed(config.seed)
-        np.random.seed(config.seed)
+    if config.seed is None:
+        seed = int(time.time() * 1000) % 100000
+    else:
+        seed = config.seed
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
 
 def get_server_args(config):

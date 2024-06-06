@@ -1,9 +1,7 @@
 import multiprocessing
 import os
-import re
 import signal
 import sys
-from dataclasses import replace
 
 from tqdm import tqdm
 
@@ -14,6 +12,13 @@ from watermark_benchmark.utils import (
     setup_randomness,
 )
 from watermark_benchmark.utils.classes import Generation
+
+from ..metrics.code import CodeRating
+from ..metrics.llm_compare import LLMCompareRating
+from ..metrics.llm_rating import LLMRating
+from ..metrics.MAUVE import MAUVERating
+from ..metrics.ppl import PPLRating
+from ..metrics.repetition import RepetitionRating
 
 
 def writer_process(queue, config, w_count):
@@ -32,104 +37,29 @@ def writer_process(queue, config, w_count):
             outfile.write("\n".join(str(gen) for gen in task) + "\n")
 
 
-def rating_process(config, generations, writer_queue, device):
-    """
-    Runs the model on the given generations and calculates the rating for each generation.
-
-    Args:
-        config (Config): Configuration object.
-        generations (List[Generation]): List of generations to rate.
-        writer_queue (Queue): Queue to write the rated generations to.
-        device (int): Index of the GPU device to use.
-
-    Returns:
-        None
-    """
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
-
-    # Imports
-    import torch
-
-    from watermark_benchmark.servers import get_model
-    from watermark_benchmark.utils import get_server_args, setup_randomness
-
-    torch.set_num_threads(1)
-
-    setup_randomness(config)
-
-    # Setup server
-    config.model = "meta-llama/Llama-2-7b-chat-hf"
-    config.max_new_tokens = 8
-    config.dtype = "float16"
-    config.num_return_sequences = 1
-    inference_engine = config.engine
-    server = get_model(inference_engine, config, **get_server_args(config))
-    tokenizer = server.tokenizer()
-    tokenizer.pad_token = tokenizer.eos_token
-
-    tasks = []
-    for generation in generations:
-        tasks.append(
-            prompt.format(
-                generation.prompt.replace("[/INST]", "")
-                .replace("[INST]", "")
-                .replace("<<SYS>>", "")
-                .replace("<</SYS>>", "")
-                .replace(
-                    "You are a helpful assistant. Always answer in the most accurate way.",
-                    "",
-                )
-                .strip(),
-                generation.response,
+def rating_process(config, generations, writer_queue, device, baselines):
+    if config.quality_metric == "llm":
+        metric = LLMRating(config, writer_queue, device)
+    elif config.quality_metric == "llm_cot":
+        metric = LLMRating(config, writer_queue, device, cot=True)
+    elif config.quality_metric == "mauve":
+        metric = MAUVERating(config, writer_queue, device)
+    elif config.quality_metric == "ppl":
+        metric = PPLRating(config, writer_queue, device)
+    elif config.quality_metric == "repetition":
+        metric = RepetitionRating(config, writer_queue, device)
+    elif config.quality_metric == "llm_compare":
+        metric = LLMCompareRating(config, writer_queue, device)
+    elif config.quality_metric == "code":
+        metric = CodeRating(config, writer_queue, device)
+    else:
+        raise ValueError(
+            "Unknown quality metric: {}. Valid metrics are [llm, mauve, ppl, repetition]".format(
+                config.quality_metric
             )
         )
 
-    # Clip sequences that are too long
-    max_token_length = 4000
-    for i in tqdm(range(len(tasks)), total=len(tasks), desc="Encoding"):
-        task = tasks[i]
-        if len(task) > max_token_length:
-            encoded_task = tokenizer(task)["input_ids"]
-            if len(encoded_task) > max_token_length:
-                print(
-                    "Warning: Task too long ({} tokens), clipping to {} tokens".format(
-                        len(encoded_task), max_token_length
-                    )
-                )
-                task = tokenizer.decode(encoded_task[:max_token_length])
-        tasks[i] = task
-
-    print("Encoding done. Ready for rating.")
-
-    # Run model
-    outputs = server.run(tasks, config, 0.0, use_tqdm=True)
-    num_regex = re.compile("([0-9]+\.*[0-9]*)")
-
-    # Parse outputs
-    for idx, gen in enumerate(outputs):
-        raw = 0.0
-        matches = re.findall(num_regex, gen.response)[:2]
-        if len(matches) >= 2:
-            try:
-                raw = float(matches[0]) / float(matches[1])
-            except Exception:
-                raw = 0
-        elif len(matches) == 1:
-            raw = float(matches[0]) / 100
-        raw = max(min(raw, 1), 0)
-
-        if idx >= len(generations):
-            print(
-                "Warning: Received more outputs than generations ({} vs {})".format(
-                    len(outputs), len(generations)
-                )
-            )
-            break
-        generations[idx] = replace(generations[idx], rating=raw)
-
-    # Write to file
-    writer_queue.put(generations)
+    metric.rate(generations, baselines)
 
 
 def run(config_file, generations=None):
@@ -144,62 +74,89 @@ def run(config_file, generations=None):
     # load generations
     generations = (
         Generation.from_file(get_input_file(config))
-        if not generations
+        if generations is None
         else generations
     )
     outfilepath = get_output_file(config)
     if not os.path.exists(outfilepath):
         Generation.to_file(outfilepath)
     existing = {
-        str(
+        (
             (
-                g.watermark.to_dict(True, True)
+                str(g.watermark.to_dict(True, True))
                 if g.watermark is not None
-                else g.temp,
-                g.id,
-                g.attack,
-            )
+                else g.temp
+            ),
+            g.attack,
         )
         for g in Generation.from_file(outfilepath)
+        if g.rating != -1
     }
-    tasks = [
-        g
-        for g in generations
-        if str(
+
+    settings = [
+        v
+        for v in set(
             (
-                g.watermark.to_dict(True, True)
-                if g.watermark is not None
-                else g.temp,
-                g.id,
+                (
+                    str(g.watermark.to_dict(True, True))
+                    if g.watermark is not None
+                    else g.temp
+                ),
                 g.attack,
             )
+            for g in generations
         )
-        not in existing
+        if v not in existing
     ]
 
-    if not len(tasks):
+    if not len(settings):
         return
 
-    ct = 1 + (len(tasks) // len(config.get_devices()))
+    baselines = {
+        (float(g.temp), g.id): g.response
+        for g in generations
+        if g.watermark is None and g.attack is None
+    }
+
+    devices = []
+    for device in config.get_devices():
+        devices.extend([device])
+    ct = 1 + (len(settings) // len(devices))
     global_manager = multiprocessing.Manager()
     processes = []
     writer_queue = global_manager.Queue()
-
-    for idx, device in enumerate(config.get_devices()):
-        local_gens = tasks[idx * ct : (idx + 1) * ct]
-        processes.append(
-            multiprocessing.Process(
-                target=rating_process,
-                args=(config, local_gens, writer_queue, device),
-            )
-        )
-        processes[-1].start()
 
     writer = multiprocessing.Process(
         target=writer_process,
         args=(writer_queue, config, len(config.get_devices())),
     )
     writer.start()
+
+    for idx, device in enumerate(devices):
+        local_settings = set(settings[idx * ct : (idx + 1) * ct])
+        local_tasks = [
+            g
+            for g in generations
+            if (
+                (
+                    str(g.watermark.to_dict(True, True))
+                    if g.watermark is not None
+                    else g.temp
+                ),
+                g.attack,
+            )
+            in local_settings
+        ]
+        if len(devices) > 1:
+            processes.append(
+                multiprocessing.Process(
+                    target=rating_process,
+                    args=(config, local_tasks, writer_queue, device, baselines),
+                )
+            )
+            processes[-1].start()
+        else:
+            rating_process(config, local_tasks, writer_queue, device, baselines)
 
     # Setup signal handler
     def graceful_exit(sig, frame):
@@ -221,9 +178,6 @@ def run(config_file, generations=None):
 def main():
     multiprocessing.set_start_method("spawn")
     run(sys.argv[1])
-
-
-prompt = "[INST] <<SYS>> You are given a prompt and a response, and you provide a grade out of 100 measuring the quality of the response, in terms of accuracy, level of details, and typographical, grammatical and lexical correctness. Remove points as soon as one of the criteria is missed. <</SYS>> Prompt: {}\nResponse: {}[/INST] Grade: "
 
 
 def rate(config_file, generations):
